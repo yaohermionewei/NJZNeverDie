@@ -19,6 +19,18 @@ import { SONGS, getSongById, getDefaultSong } from './songRegistry';
 import { parseLrc } from './utils/lrcParser';
 import { LyricLine, ThemeMode, VinylParams } from './types';
 
+// Preload Cubes theme rabbit images (default theme - load immediately)
+import rabbitImg from './assets/rabbit.webp';
+import rabbitFlyUpImg from './assets/rabbitflyup.webp';
+import rabbitDropDownImg from './assets/rabbitdropdown.webp';
+import rabbitLeftImg from './assets/rabbitleft.webp';
+import rabbitLeftFlyUpImg from './assets/leftflyup.webp';
+import rabbitLeftDropDownImg from './assets/leftdropdown.webp';
+
+// Start preloading before component mounts (browser will cache these)
+[rabbitImg, rabbitFlyUpImg, rabbitDropDownImg, rabbitLeftImg, rabbitLeftFlyUpImg, rabbitLeftDropDownImg]
+  .forEach(src => { const img = new Image(); img.src = src; });
+
 const App: React.FC = () => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [theme, setTheme] = useState<ThemeMode>('cubes');
