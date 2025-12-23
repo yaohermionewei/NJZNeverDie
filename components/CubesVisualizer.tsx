@@ -52,6 +52,9 @@ interface CubesVisualizerProps {
   isPlaying: boolean;
   params: CubesParams;
   colorTheme: CubesTheme;
+  // Bottom UI inset in pixels (e.g. controls height + gap). Used to shift objects up on screen
+  // while keeping the background full-screen.
+  uiBottomInsetPx?: number;
 }
 
 // 8x8 grid as per reference image
@@ -141,7 +144,8 @@ const CubesVisualizer: React.FC<CubesVisualizerProps> = ({
   analyser,
   isPlaying,
   params,
-  colorTheme
+  colorTheme,
+  uiBottomInsetPx
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
@@ -167,6 +171,8 @@ const CubesVisualizer: React.FC<CubesVisualizerProps> = ({
   const currentScalesRef = useRef<Float32Array>(new Float32Array(GRID_SIZE * GRID_SIZE).fill(1));
   const animationIdRef = useRef<number | null>(null);
   const noiseRef = useRef<SimplexNoise>(new SimplexNoise());
+  const uiBottomInsetPxRef = useRef<number>(0);
+  const lookAtShiftRef = useRef<number>(0);
   
   // Initialize Three.js scene (runs once, never rebuilds)
   useEffect(() => {
@@ -387,6 +393,11 @@ const CubesVisualizer: React.FC<CubesVisualizerProps> = ({
     shaderMaterial.uniforms.colorTop.value.setRGB(...colorScheme.cubeTop);
   }, [colorTheme]);
 
+  // Track bottom inset (controls height) without retriggering heavy effects
+  useEffect(() => {
+    uiBottomInsetPxRef.current = uiBottomInsetPx ?? 0;
+  }, [uiBottomInsetPx]);
+
   // ===== ANIMATION LOOP =====
   useEffect(() => {
     if (cubesRef.current.length === 0 || !rendererRef.current || !sceneRef.current || !cameraRef.current) {
@@ -402,11 +413,24 @@ const CubesVisualizer: React.FC<CubesVisualizerProps> = ({
     const renderer = rendererRef.current;
     const cubes = cubesRef.current;
     const noise = noiseRef.current;
+    const container = containerRef.current;
     const halfGrid = (GRID_SIZE - 1) * CUBE_SPACING / 2;
     const maxDistance = Math.sqrt(halfGrid * halfGrid + halfGrid * halfGrid);
 
     const animate = () => {
       animationIdRef.current = requestAnimationFrame(animate);
+
+      // Keep background full-screen; only shift the framing up to avoid overlapping bottom controls.
+      // IMPORTANT: Do NOT move the scene in world space, because the shader colors depend on WORLD Y.
+      if (container) {
+        const insetPx = Math.max(0, uiBottomInsetPxRef.current);
+        const h = Math.max(1, container.clientHeight);
+        const ratio = THREE.MathUtils.clamp(insetPx / h, 0, 0.5);
+        // Ratio -> lookAt shift (tuned). Looking slightly lower pushes the content upward on screen.
+        const targetShift = THREE.MathUtils.clamp(ratio * 6.0, 0, 2.5);
+        lookAtShiftRef.current = THREE.MathUtils.lerp(lookAtShiftRef.current, targetShift, 0.12);
+        camera.lookAt(0, 1 - lookAtShiftRef.current, 0);
+      }
 
       if (analyser && isPlaying) {
         analyser.getByteFrequencyData(audioDataRef.current);

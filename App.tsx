@@ -50,6 +50,8 @@ const App: React.FC = () => {
   // Performance optimization: throttle currentTime updates
   const lastTimeUpdateRef = useRef<number>(0);
   const lastLyricIndexRef = useRef<number>(-1);
+  // Mobile layout: measure bottom controls height to avoid visualizer overlap
+  const [controlsHeightPx, setControlsHeightPx] = useState<number>(0);
   const [smallLyricTop, setSmallLyricTop] = useState<number | null>(null);
   const [smallLyricMaxHeight, setSmallLyricMaxHeight] = useState<number | null>(null);
   
@@ -69,6 +71,35 @@ const App: React.FC = () => {
       window.removeEventListener('resize', syncViewport);
       vv?.removeEventListener('resize', syncViewport);
       vv?.removeEventListener('scroll', syncViewport);
+    };
+  }, []);
+
+  // Measure bottom controls height (dynamic, responsive to iOS browser bars / font size changes)
+  useLayoutEffect(() => {
+    const el = controlsRef.current;
+    if (!el) return;
+
+    const measure = () => {
+      const rect = el.getBoundingClientRect();
+      const h = Math.max(0, Math.round(rect.height));
+      setControlsHeightPx(h);
+    };
+
+    measure();
+
+    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(() => measure()) : null;
+    ro?.observe(el);
+
+    const vv = window.visualViewport;
+    vv?.addEventListener('resize', measure);
+    vv?.addEventListener('scroll', measure);
+    window.addEventListener('resize', measure);
+
+    return () => {
+      ro?.disconnect();
+      vv?.removeEventListener('resize', measure);
+      vv?.removeEventListener('scroll', measure);
+      window.removeEventListener('resize', measure);
     };
   }, []);
   
@@ -561,6 +592,9 @@ const App: React.FC = () => {
              isPlaying={isPlaying}
              params={cubesParams}
              colorTheme={currentSong.cubesTheme}
+             // Keep background full-screen; only shift the "objects" framing up to avoid overlapping the controls.
+             // Keep the scene stable when UI auto-hides: always reserve the same bottom inset.
+             uiBottomInsetPx={Math.max(0, controlsHeightPx) + 12}
            />
            <CubesControls 
              params={cubesParams}
@@ -656,7 +690,7 @@ const App: React.FC = () => {
             {/* 竖排时居中对齐，大屏时左对齐 */}
             <div className="w-full lg:w-5/12 flex flex-col h-full lg:pr-8 mt-4 items-center lg:items-start">
                {/* Song Header - 小屏时字号缩小 */}
-               <div className="mb-6 flex-shrink-0 text-center lg:text-left">
+               <div className="mb-6 flex-shrink-0 text-center lg:text-left relative -top-[10px] sm:top-0">
                   <div className="flex items-center justify-center lg:justify-start gap-3 mb-2">
                       <h1 className="text-[18px] lg:text-3xl font-bold text-gray-900 tracking-tight leading-tight">{currentSong.title}</h1>
                   </div>

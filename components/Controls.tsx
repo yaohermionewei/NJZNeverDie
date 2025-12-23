@@ -110,7 +110,7 @@ const Controls: React.FC<ControlsProps> = ({
         </div>
 
         {/* Center: Playback */}
-        <div className="flex items-center gap-8 flex-1 justify-center">
+        <div className="flex items-center gap-6 md:gap-8 flex-1 justify-center">
           <button 
             onClick={onSkipPrev}
             className={`${darkUI ? 'text-white/60 hover:text-white/80' : 'text-black/45 hover:text-black/65'} transition-colors active:scale-90`}
