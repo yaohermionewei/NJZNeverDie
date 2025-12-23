@@ -1,0 +1,42 @@
+{
+  "ui": {
+    "themes": "Themes",
+    "playlist": "Playlist",
+    "close": "Close",
+    "play": "Play",
+    "pause": "Pause",
+    "reset": "Reset",
+    "language": "Language"
+  },
+  "themes": {
+    "powerpuff": "Powerpuff Girls",
+    "cubes": "BNZ Rabbit Trampoline",
+    "particle": "Particle Cover",
+    "vinyl": "Graffiti Vinyl"
+  },
+  "controls": {
+    "cubes_title": "Cubes Control",
+    "bounce_height": "Bounce Height",
+    "wave_spread": "Wave Spread",
+    "damping": "Sensitivity",
+    "show_rabbits": "Show Rabbits",
+    "particle_title": "Particle Control",
+    "density": "Density",
+    "size": "Size",
+    "amplitude": "Amplitude",
+    "speed": "Speed",
+    "fall_speed": "Fall Speed",
+    "air_resistance": "Air Resistance",
+    "kick_sensitivity": "Kick Sensitivity",
+    "trail_length": "Trail Length",
+    "vinyl_title": "Vinyl Control",
+    "vinyl_speed": "Vinyl Speed",
+    "rabbit_speed": "Rabbit Speed",
+    "powerpuff_title": "Powerpuff Settings",
+    "scene_speed": "Scene Speed",
+    "friction": "Friction",
+    "bounce_strength": "Bounce Strength",
+    "sensitivity": "Sensitivity"
+  }
+}
+
