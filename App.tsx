@@ -21,7 +21,7 @@ import { LyricLine, ThemeMode, VinylParams } from './types';
 
 const App: React.FC = () => {
   const [isPlaying, setIsPlaying] = useState(false);
-  const [theme, setTheme] = useState<ThemeMode>('powerpuff');
+  const [theme, setTheme] = useState<ThemeMode>('cubes');
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [currentSongId, setCurrentSongId] = useState<string>(getDefaultSong().id);
@@ -35,6 +35,9 @@ const App: React.FC = () => {
   const mouseIdleTimerRef = useRef<NodeJS.Timeout | null>(null);
   const vinylRef = useRef<HTMLDivElement | null>(null);
   const controlsRef = useRef<HTMLDivElement | null>(null);
+  // Performance optimization: throttle currentTime updates
+  const lastTimeUpdateRef = useRef<number>(0);
+  const lastLyricIndexRef = useRef<number>(-1);
   const [smallLyricTop, setSmallLyricTop] = useState<number | null>(null);
   const [smallLyricMaxHeight, setSmallLyricMaxHeight] = useState<number | null>(null);
   
@@ -171,6 +174,10 @@ const App: React.FC = () => {
     setDuration(0);
     setIsPlaying(false);
     
+    // Reset throttle refs for new song
+    lastTimeUpdateRef.current = 0;
+    lastLyricIndexRef.current = -1;
+    
     // Switch to new song
     setCurrentSongId(songId);
   };
@@ -258,10 +265,29 @@ const App: React.FC = () => {
     }
   };
 
-  // Update time
+  // Update time - optimized to reduce unnecessary re-renders
+  // Only update state when: 1) lyric changes, or 2) 1 second has passed
   const onTimeUpdate = () => {
-    if (audioRef.current) {
-      setCurrentTime(audioRef.current.currentTime);
+    if (!audioRef.current) return;
+    const newTime = audioRef.current.currentTime;
+    
+    // Calculate which lyric line should be active
+    const newLyricIndex = lyrics.findIndex((l, i) => {
+      const nextL = lyrics[i + 1];
+      return newTime >= l.time && (!nextL || newTime < nextL.time);
+    });
+    
+    // Condition 1: Lyric changed → update immediately
+    const lyricChanged = newLyricIndex !== lastLyricIndexRef.current;
+    
+    // Condition 2: More than 1 second since last update → update (for progress bar & time display)
+    const timeSinceLastUpdate = Math.abs(newTime - lastTimeUpdateRef.current);
+    const needsPeriodicUpdate = timeSinceLastUpdate >= 1.0;
+    
+    if (lyricChanged || needsPeriodicUpdate) {
+      lastLyricIndexRef.current = newLyricIndex;
+      lastTimeUpdateRef.current = newTime;
+      setCurrentTime(newTime);
     }
   };
 
@@ -411,7 +437,7 @@ const App: React.FC = () => {
   }, [theme, isUIHidden, currentSongId]);
 
   return (
-    <div className="relative w-full h-screen bg-gray-50 overflow-hidden flex flex-col font-sans selection:bg-[#ff4d6a] selection:text-white">
+    <div className="relative w-full h-screen h-[100dvh] bg-gray-50 overflow-hidden flex flex-col font-sans selection:bg-[#ff4d6a] selection:text-white">
       
       {/* Vinyl 背景模糊层：常驻挂载 + inline blur，避免 Tailwind CDN 首次进入时 blur 类“现编译”导致的露馅闪屏 */}
       <div
@@ -441,6 +467,7 @@ const App: React.FC = () => {
         onLoadedMetadata={onLoadedMetadata}
         onEnded={onEnded}
         crossOrigin="anonymous"
+        preload="metadata"
       />
 
       {/* Conditional Rendering based on Theme */}

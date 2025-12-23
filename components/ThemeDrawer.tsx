@@ -3,11 +3,11 @@ import { X, Check } from 'lucide-react';
 import type { ThemeMode } from '../types';
 import { useTranslation } from 'react-i18next';
 
-// Preview images
-import girlsPreview from '../assets/girls.png';
-import cubesPreview from '../assets/cubes.png';
-import particlesPreview from '../assets/particles.png';
-import vinylPreview from '../assets/vingl.png';
+// Preview images (optimized WebP)
+import girlsPreview from '../assets/girls.webp';
+import cubesPreview from '../assets/cubes.webp';
+import particlesPreview from '../assets/particles.webp';
+import vinylPreview from '../assets/vinyl.webp';
 
 interface ThemeOption {
   id: ThemeMode;
@@ -111,6 +111,7 @@ const ThemeDrawer: React.FC<ThemeDrawerProps> = ({
                       src={t.preview}
                       alt={t.label}
                       className="w-full h-full object-cover"
+                      loading="lazy"
                     />
                     {/* Checkmark in top-right corner */}
                     {selected && (

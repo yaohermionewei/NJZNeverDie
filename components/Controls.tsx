@@ -4,6 +4,7 @@ import { Play, Pause, Menu, Palette } from 'lucide-react';
 import { ThemeMode } from '../types';
 import { isDarkTheme } from './themeRegistry';
 import { useTranslation } from 'react-i18next';
+import carrot from '../assets/carrot.png';
 
 // Filled skip icons (player-style): solid triangle + bar.
 // Uses currentColor so fill color always matches the button color (dark/light themes).
@@ -80,7 +81,7 @@ const Controls: React.FC<ControlsProps> = ({
 
   return (
     // Removed background color and border-top to blend seamlessly with the page
-    <div className="w-full px-6 md:px-12 pb-8 pt-2 flex flex-col gap-2 z-50 relative">
+    <div className="w-full px-6 md:px-12 pb-[max(2rem,env(safe-area-inset-bottom))] pt-2 flex flex-col gap-2 z-50 relative">
       
       {/* Control Icons Row - Moved above progress bar */}
       <div className="flex items-center justify-between mb-2">
@@ -179,13 +180,22 @@ const Controls: React.FC<ControlsProps> = ({
             style={{ width: `${duration ? (currentTime / duration) * 100 : 0}%` }}
           ></div>
           
-          {/* Drag Handle - Only visible on hover for cleaner look */}
-          <div 
-             className={`absolute top-1/2 -translate-y-1/2 w-2.5 h-2.5 rounded-full shadow-md opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none ${
-               darkUI ? 'bg-white border border-white/20' : 'bg-white border border-black/10'
-             }`}
-             style={{ left: `${duration ? (currentTime / duration) * 100 : 0}%` }}
-          ></div>
+          {/* Drag Handle - vinyl 用胡萝卜，其他用圆形；触屏设备始终显示，桌面端 hover 才显示 */}
+          {theme === 'vinyl' ? (
+            <img 
+              src={carrot}
+              alt=""
+              className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-5 h-5 object-contain opacity-100 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 transition-opacity pointer-events-none drop-shadow-sm"
+              style={{ left: `${duration ? (currentTime / duration) * 100 : 0}%` }}
+            />
+          ) : (
+            <div 
+              className={`absolute top-1/2 -translate-y-1/2 w-2.5 h-2.5 rounded-full shadow-md opacity-100 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 transition-opacity pointer-events-none ${
+                darkUI ? 'bg-white border border-white/20' : 'bg-white border border-black/10'
+              }`}
+              style={{ left: `${duration ? (currentTime / duration) * 100 : 0}%` }}
+            />
+          )}
         </div>
         <span className="w-10 tabular-nums">{formatTime(duration)}</span>
       </div>

@@ -1,12 +1,12 @@
 import React, { useRef, useEffect } from 'react';
 import * as THREE from 'three';
 import { SimplexNoise } from 'three/examples/jsm/math/SimplexNoise.js';
-import rabbitImg from '../assets/rabbit.png';
-import rabbitFlyUpImg from '../assets/rabbitflyup.png';
-import rabbitDropDownImg from '../assets/rabbitdropdown.png';
-import rabbitLeftImg from '../assets/rabbitleft.png';
-import rabbitLeftFlyUpImg from '../assets/leftflyup.png';
-import rabbitLeftDropDownImg from '../assets/leftdropdown.png';
+import rabbitImg from '../assets/rabbit.webp';
+import rabbitFlyUpImg from '../assets/rabbitflyup.webp';
+import rabbitDropDownImg from '../assets/rabbitdropdown.webp';
+import rabbitLeftImg from '../assets/rabbitleft.webp';
+import rabbitLeftFlyUpImg from '../assets/leftflyup.webp';
+import rabbitLeftDropDownImg from '../assets/leftdropdown.webp';
 
 export interface CubesParams {
   height: number;
@@ -148,6 +148,10 @@ const CubesVisualizer: React.FC<CubesVisualizerProps> = ({
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const cubesRef = useRef<THREE.Mesh[]>([]);
+  // Refs for color theme updates (avoid full scene rebuild)
+  const shaderMaterialRef = useRef<THREE.ShaderMaterial | null>(null);
+  const bgTextureRef = useRef<THREE.CanvasTexture | null>(null);
+  const colorThemeRef = useRef<CubesTheme>(colorTheme); // Track current theme for init
   const rabbitsRef = useRef<{
     sprite: THREE.Sprite;
     cubeIndex: number;
@@ -164,7 +168,7 @@ const CubesVisualizer: React.FC<CubesVisualizerProps> = ({
   const animationIdRef = useRef<number | null>(null);
   const noiseRef = useRef<SimplexNoise>(new SimplexNoise());
   
-  // Initialize Three.js scene
+  // Initialize Three.js scene (runs once, never rebuilds)
   useEffect(() => {
     if (!containerRef.current) return;
 
@@ -175,8 +179,8 @@ const CubesVisualizer: React.FC<CubesVisualizerProps> = ({
     sceneRef.current = scene;
 
     // ===== BACKGROUND GRADIENT =====
-    // 根据 colorTheme 获取配色方案
-    const colorScheme = CUBES_COLOR_SCHEMES[colorTheme];
+    // Use ref to get initial color (avoid adding colorTheme as dependency)
+    const colorScheme = CUBES_COLOR_SCHEMES[colorThemeRef.current];
     
     const canvas = document.createElement('canvas');
     canvas.width = 2;
@@ -191,6 +195,7 @@ const CubesVisualizer: React.FC<CubesVisualizerProps> = ({
     ctx.fillRect(0, 0, 2, 512);
     
     const bgTexture = new THREE.CanvasTexture(canvas);
+    bgTextureRef.current = bgTexture;
     scene.background = bgTexture;
 
     // ===== FOG =====
@@ -239,6 +244,7 @@ const CubesVisualizer: React.FC<CubesVisualizerProps> = ({
         maxHeight: { value: MAX_HEIGHT }
       }
     });
+    shaderMaterialRef.current = shaderMaterial;
 
     const cubes: THREE.Mesh[] = [];
     const halfGrid = (GRID_SIZE - 1) * CUBE_SPACING / 2;
@@ -339,7 +345,47 @@ const CubesVisualizer: React.FC<CubesVisualizerProps> = ({
       cubeGeometry.dispose();
       shaderMaterial.dispose();
     };
-  }, [colorTheme]); // 当配色主题变化时重新初始化场景
+  }, []); // Only run once - color updates handled by separate useEffect
+
+  // ===== COLOR THEME UPDATE (lightweight, no scene rebuild) =====
+  useEffect(() => {
+    // Update ref for future initializations
+    colorThemeRef.current = colorTheme;
+    
+    // Skip if scene not initialized yet
+    if (!sceneRef.current || !shaderMaterialRef.current || !bgTextureRef.current) {
+      return;
+    }
+
+    const colorScheme = CUBES_COLOR_SCHEMES[colorTheme];
+    const scene = sceneRef.current;
+    const shaderMaterial = shaderMaterialRef.current;
+    const bgTexture = bgTextureRef.current;
+
+    // 1. Update background gradient texture
+    const canvas = document.createElement('canvas');
+    canvas.width = 2;
+    canvas.height = 512;
+    const ctx = canvas.getContext('2d')!;
+    const gradient = ctx.createLinearGradient(0, 0, 0, 512);
+    gradient.addColorStop(0, colorScheme.bgTop);
+    gradient.addColorStop(1, colorScheme.bgBottom);
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, 2, 512);
+    
+    // Update existing texture instead of creating new one
+    bgTexture.image = canvas;
+    bgTexture.needsUpdate = true;
+
+    // 2. Update fog color
+    if (scene.fog instanceof THREE.Fog) {
+      scene.fog.color.set(colorScheme.bgBottom);
+    }
+
+    // 3. Update shader uniforms (cube colors)
+    shaderMaterial.uniforms.colorBottom.value.setRGB(...colorScheme.cubeBottom);
+    shaderMaterial.uniforms.colorTop.value.setRGB(...colorScheme.cubeTop);
+  }, [colorTheme]);
 
   // ===== ANIMATION LOOP =====
   useEffect(() => {

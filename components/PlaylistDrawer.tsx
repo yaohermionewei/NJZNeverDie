@@ -87,22 +87,30 @@ const PlaylistDrawer: React.FC<PlaylistDrawerProps> = ({
                 <div
                   key={song.id}
                   className={`group flex items-center gap-3 p-3 rounded-xl transition-colors cursor-pointer ${
-                    darkUI ? 'hover:bg-white/10' : 'hover:bg-black/5'
+                    darkUI 
+                      ? '[@media(hover:hover)]:hover:bg-white/10' 
+                      : '[@media(hover:hover)]:hover:bg-black/5'
                   }`}
                   onClick={() => {
-                    if (!isCurrentSong) onSelectSong(song.id);
+                    // 触屏设备：点击整行直接播放/暂停
+                    if (isCurrentSong) {
+                      onPlayPause();
+                    } else {
+                      onSelectSong(song.id);
+                    }
                   }}
                 >
                   {/* Cover */}
-                  <div className="relative w-12 h-12 rounded-md overflow-hidden flex-shrink-0 shadow-sm">
+                  <div className="relative w-12 h-12 rounded-md overflow-hidden flex-shrink-0 shadow-sm bg-black/10">
                     <img
                       src={song.coverUrl}
                       alt={song.title}
                       className="w-full h-full object-cover"
+                      loading="lazy"
                     />
-                    {/* Hover overlay */}
+                    {/* Hover overlay - 只在支持 hover 的设备上显示 */}
                     <button
-                      className="absolute inset-0 bg-black/45 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                      className="absolute inset-0 bg-black/45 flex items-center justify-center transition-opacity opacity-0 pointer-events-none [@media(hover:hover)]:group-hover:opacity-100 [@media(hover:hover)]:group-hover:pointer-events-auto"
                       onClick={(e) => {
                         e.stopPropagation();
                         if (isCurrentSong) {

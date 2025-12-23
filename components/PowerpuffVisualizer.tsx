@@ -1,70 +1,70 @@
 import React, { useRef, useEffect, useCallback } from 'react';
 
-// Import character images
+// Import character images (WebP optimized)
 // Blue character - animated sequence (5 frames)
-import blue1 from '../NJZPowerpuffGirls/blue1.png';
-import blue2 from '../NJZPowerpuffGirls/blue2.png';
-import blue3 from '../NJZPowerpuffGirls/blue3.png';
-import blue4 from '../NJZPowerpuffGirls/blue4.png';
-import blue5 from '../NJZPowerpuffGirls/blue5.png';
+import blue1 from '../NJZPowerpuffGirls/blue1.webp';
+import blue2 from '../NJZPowerpuffGirls/blue2.webp';
+import blue3 from '../NJZPowerpuffGirls/blue3.webp';
+import blue4 from '../NJZPowerpuffGirls/blue4.webp';
+import blue5 from '../NJZPowerpuffGirls/blue5.webp';
 // Pink character - animated sequence (5 frames)
-import pink1 from '../NJZPowerpuffGirls/pink1.png';
-import pink2 from '../NJZPowerpuffGirls/pink2.png';
-import pink3 from '../NJZPowerpuffGirls/pink3.png';
-import pink4 from '../NJZPowerpuffGirls/pink4.png';
-import pink5 from '../NJZPowerpuffGirls/pink5.png';
+import pink1 from '../NJZPowerpuffGirls/pink1.webp';
+import pink2 from '../NJZPowerpuffGirls/pink2.webp';
+import pink3 from '../NJZPowerpuffGirls/pink3.webp';
+import pink4 from '../NJZPowerpuffGirls/pink4.webp';
+import pink5 from '../NJZPowerpuffGirls/pink5.webp';
 // Green character - animated sequence (5 frames)
-import green1 from '../NJZPowerpuffGirls/green1.png';
-import green2 from '../NJZPowerpuffGirls/green2.png';
-import green3 from '../NJZPowerpuffGirls/green3.png';
-import green4 from '../NJZPowerpuffGirls/green4.png';
-import green5 from '../NJZPowerpuffGirls/green5.png';
+import green1 from '../NJZPowerpuffGirls/green1.webp';
+import green2 from '../NJZPowerpuffGirls/green2.webp';
+import green3 from '../NJZPowerpuffGirls/green3.webp';
+import green4 from '../NJZPowerpuffGirls/green4.webp';
+import green5 from '../NJZPowerpuffGirls/green5.webp';
 // Yellow character - animated sequence (5 frames)
-import yellow1 from '../NJZPowerpuffGirls/yellow1.png';
-import yellow2 from '../NJZPowerpuffGirls/yellow2.png';
-import yellow3 from '../NJZPowerpuffGirls/yellow3.png';
-import yellow4 from '../NJZPowerpuffGirls/yellow4.png';
-import yellow5 from '../NJZPowerpuffGirls/yellow5.png';
+import yellow1 from '../NJZPowerpuffGirls/yellow1.webp';
+import yellow2 from '../NJZPowerpuffGirls/yellow2.webp';
+import yellow3 from '../NJZPowerpuffGirls/yellow3.webp';
+import yellow4 from '../NJZPowerpuffGirls/yellow4.webp';
+import yellow5 from '../NJZPowerpuffGirls/yellow5.webp';
 // Purple character - animated sequence (5 frames)
-import purple1 from '../NJZPowerpuffGirls/purple1.png';
-import purple2 from '../NJZPowerpuffGirls/purple2.png';
-import purple3 from '../NJZPowerpuffGirls/purple3.png';
-import purple4 from '../NJZPowerpuffGirls/purple4.png';
-import purple5 from '../NJZPowerpuffGirls/purple5.png';
+import purple1 from '../NJZPowerpuffGirls/purple1.webp';
+import purple2 from '../NJZPowerpuffGirls/purple2.webp';
+import purple3 from '../NJZPowerpuffGirls/purple3.webp';
+import purple4 from '../NJZPowerpuffGirls/purple4.webp';
+import purple5 from '../NJZPowerpuffGirls/purple5.webp';
 
 // Gingerbread man - animated sequence (7 frames) for background
-import gingerman1 from '../NJZPowerpuffGirls/gingerman1.png';
-import gingerman2 from '../NJZPowerpuffGirls/gingerman2.png';
-import gingerman3 from '../NJZPowerpuffGirls/gingerman3.png';
-import gingerman4 from '../NJZPowerpuffGirls/gingerman4.png';
-import gingerman5 from '../NJZPowerpuffGirls/gingerman5.png';
-import gingerman6 from '../NJZPowerpuffGirls/gingerman6.png';
-import gingerman7 from '../NJZPowerpuffGirls/gingerman7.png';
+import gingerman1 from '../NJZPowerpuffGirls/gingerman1.webp';
+import gingerman2 from '../NJZPowerpuffGirls/gingerman2.webp';
+import gingerman3 from '../NJZPowerpuffGirls/gingerman3.webp';
+import gingerman4 from '../NJZPowerpuffGirls/gingerman4.webp';
+import gingerman5 from '../NJZPowerpuffGirls/gingerman5.webp';
+import gingerman6 from '../NJZPowerpuffGirls/gingerman6.webp';
+import gingerman7 from '../NJZPowerpuffGirls/gingerman7.webp';
 
 // Skating rabbit - animated sequence (6 frames)
-import rabbit1 from '../NJZPowerpuffGirls/rabbit1.png';
-import rabbit2 from '../NJZPowerpuffGirls/rabbit2.png';
-import rabbit3 from '../NJZPowerpuffGirls/rabbit3.png';
-import rabbit4 from '../NJZPowerpuffGirls/rabbit4.png';
-import rabbit5 from '../NJZPowerpuffGirls/rabbit5.png';
-import rabbit6 from '../NJZPowerpuffGirls/rabbit6.png';
+import rabbit1 from '../NJZPowerpuffGirls/rabbit1.webp';
+import rabbit2 from '../NJZPowerpuffGirls/rabbit2.webp';
+import rabbit3 from '../NJZPowerpuffGirls/rabbit3.webp';
+import rabbit4 from '../NJZPowerpuffGirls/rabbit4.webp';
+import rabbit5 from '../NJZPowerpuffGirls/rabbit5.webp';
+import rabbit6 from '../NJZPowerpuffGirls/rabbit6.webp';
 
 // Deer - animated sequence (6 frames)
-import deer1 from '../NJZPowerpuffGirls/deer1.png';
-import deer2 from '../NJZPowerpuffGirls/deer2.png';
-import deer3 from '../NJZPowerpuffGirls/deer3.png';
-import deer4 from '../NJZPowerpuffGirls/deer4.png';
-import deer5 from '../NJZPowerpuffGirls/deer5.png';
-import deer6 from '../NJZPowerpuffGirls/deer6.png';
+import deer1 from '../NJZPowerpuffGirls/deer1.webp';
+import deer2 from '../NJZPowerpuffGirls/deer2.webp';
+import deer3 from '../NJZPowerpuffGirls/deer3.webp';
+import deer4 from '../NJZPowerpuffGirls/deer4.webp';
+import deer5 from '../NJZPowerpuffGirls/deer5.webp';
+import deer6 from '../NJZPowerpuffGirls/deer6.webp';
 
-// Import background images for parallax layers
-import bottom1 from '../NJZPowerpuffGirls/bottom1.png';
-import bottom2 from '../NJZPowerpuffGirls/bottom2.png';
-import bottom3 from '../NJZPowerpuffGirls/bottom3.png';
-import middle1 from '../NJZPowerpuffGirls/middle1.png';
-import middle2 from '../NJZPowerpuffGirls/middle2.png';
-import middle3 from '../NJZPowerpuffGirls/middle3.png';
-import topImg from '../NJZPowerpuffGirls/top.png';
+// Import background images for parallax layers (optimized WebP)
+import bottom1 from '../NJZPowerpuffGirls/bottom1.webp';
+import bottom2 from '../NJZPowerpuffGirls/bottom2.webp';
+import bottom3 from '../NJZPowerpuffGirls/bottom3.webp';
+import middle1 from '../NJZPowerpuffGirls/middle1.webp';
+import middle2 from '../NJZPowerpuffGirls/middle2.webp';
+import middle3 from '../NJZPowerpuffGirls/middle3.webp';
+import topImg from '../NJZPowerpuffGirls/top.webp';
 
 // Debug flag - set to true to see console logs
 const DEBUG = false;
@@ -310,6 +310,9 @@ const PowerpuffVisualizer: React.FC<PowerpuffVisualizerProps> = ({ analyser, isP
   // Latest overlay texts (avoid re-starting animation loop on every lyric change)
   const lyricLineRef = useRef<string>('');
   const songInfoRef = useRef<string>('');
+  
+  // Cache for lyric line wrapping (avoid recalculating every frame)
+  const wrapCacheRef = useRef<{ text: string; width: number; lines: string[] } | null>(null);
 
   // === Mid-layer lyric overlay (between bottom and middle layers) ===
   // Keep display always visible (regardless of App UI hidden state) and fixed in screen space.
@@ -790,7 +793,16 @@ const PowerpuffVisualizer: React.FC<PowerpuffVisualizerProps> = ({ analyser, isP
               return lines;
             };
 
-            const lines = wrapLines(o.currentLyric);
+            // Use cached wrap result if lyric and width haven't changed
+            const cache = wrapCacheRef.current;
+            let lines: string[];
+            if (cache && cache.text === o.currentLyric && cache.width === maxWidth) {
+              lines = cache.lines;  // Cache hit - skip expensive calculation
+            } else {
+              lines = wrapLines(o.currentLyric);  // Cache miss - calculate and store
+              wrapCacheRef.current = { text: o.currentLyric, width: maxWidth, lines };
+            }
+            
             const startX = baseX + floatX;
             const startY = baseY + floatY;
             for (let i = 0; i < lines.length; i++) {

@@ -342,7 +342,12 @@ const ParticleVisualizer: React.FC<ParticleVisualizerProps> = ({
       audioData = new Uint8Array(analyser.frequencyBinCount);
     }
 
+    // Performance optimization: only sort particles every N frames
+    let frameCount = 0;
+    const SORT_INTERVAL = 5; // Sort every 5 frames (↓80% sorting overhead)
+
     const render = () => {
+      frameCount++;
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       ctx.globalCompositeOperation = 'source-over';
       
@@ -411,7 +416,11 @@ const ParticleVisualizer: React.FC<ParticleVisualizerProps> = ({
         p.z = p.z * expansion;
       });
 
-      particlesRef.current.sort((a, b) => b.z - a.z);
+      // Only sort every SORT_INTERVAL frames (performance optimization)
+      // Visual impact is negligible since particle z-positions change slowly
+      if (frameCount % SORT_INTERVAL === 0) {
+        particlesRef.current.sort((a, b) => b.z - a.z);
+      }
 
       particlesRef.current.forEach(p => {
         p.draw(ctx, canvas.width, canvas.height);

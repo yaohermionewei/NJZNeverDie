@@ -16,13 +16,13 @@ import hypeBoyLrc from './lyrics_official/Hype Boy - 250 Remix.json?raw';
 import omgLrc from './lyrics_official/OMG - FRNK Remix.json?raw';
 import cookieLrc from './lyrics_official/Cookie - FRNK Remix.json?raw';
 
-// Import cover images
-import dittoCover from './albums/Ditto - 250 Remix.jpg';
-import supernaturalCover from './albums/Supernatural - 250 Remix.png';
-import attentionCover from './albums/Attention - 250 Remix.jpg';
-import hypeBoyCoevr from './albums/Hype Boy - 250 Remix.jpg';
-import omgCover from './albums/OMG - FRNK Remix.jpg';
-import cookieCover from './albums/Cookie - FRNK Remix.jpg';
+// Import cover images (optimized WebP)
+import dittoCover from './albums/Ditto - 250 Remix.webp';
+import supernaturalCover from './albums/Supernatural - 250 Remix.webp';
+import attentionCover from './albums/Attention - 250 Remix.webp';
+import hypeBoyCoevr from './albums/Hype Boy - 250 Remix.webp';
+import omgCover from './albums/OMG - FRNK Remix.webp';
+import cookieCover from './albums/Cookie - FRNK Remix.webp';
 
 export interface SongInfo {
   id: string;

@@ -1,12 +1,12 @@
 
 import React, { useEffect, useRef, useState } from 'react';
-import doodleVinyl from '../doodlevingl.png';
-import rabbitSkate1 from '../assets/rabbitSkate1.png';
-import rabbitSkate2 from '../assets/rabbitSkate2.png';
-import rabbitSkate3 from '../assets/rabbitSkate3.png';
-import rabbitSkate4 from '../assets/rabbitSkate4.png';
-import rabbitSkate5 from '../assets/rabbitSkate5.png';
-import rabbitSkate6 from '../assets/rabbitSkate6.png';
+import doodleVinyl from '../doodlevingl.webp';
+import rabbitSkate1 from '../assets/rabbitSkate1.webp';
+import rabbitSkate2 from '../assets/rabbitSkate2.webp';
+import rabbitSkate3 from '../assets/rabbitSkate3.webp';
+import rabbitSkate4 from '../assets/rabbitSkate4.webp';
+import rabbitSkate5 from '../assets/rabbitSkate5.webp';
+import rabbitSkate6 from '../assets/rabbitSkate6.webp';
 
 const RABBIT_FRAMES = [
   rabbitSkate1,

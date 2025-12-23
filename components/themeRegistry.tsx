@@ -1,6 +1,5 @@
 import React from 'react';
 import { ThemeMode } from '../types';
-import blackVinyl from '../blackvinyl.png';
 
 export type ThemeMeta = {
   id: ThemeMode;
@@ -12,8 +11,10 @@ export type ThemeMeta = {
 };
 
 const VinylPreview: React.FC = () => (
-  <div className="w-full aspect-square rounded-md overflow-hidden bg-gray-200 relative shadow-sm flex items-center justify-center">
-    <img src={blackVinyl} alt="Transparent Vinyl" className="w-full h-full object-cover" />
+  <div className="w-full aspect-square rounded-md overflow-hidden bg-gradient-to-br from-gray-100 to-gray-300 relative shadow-sm flex items-center justify-center">
+    <div className="w-12 h-12 rounded-full bg-gradient-to-br from-gray-700 via-gray-500 to-gray-800 shadow-lg flex items-center justify-center">
+      <div className="w-4 h-4 rounded-full bg-gray-300"></div>
+    </div>
   </div>
 );
 
