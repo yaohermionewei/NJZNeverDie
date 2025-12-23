@@ -81,7 +81,11 @@ const Controls: React.FC<ControlsProps> = ({
 
   return (
     // Removed background color and border-top to blend seamlessly with the page
-    <div className="w-full px-6 md:px-12 pb-[max(2rem,env(safe-area-inset-bottom))] pt-2 flex flex-col gap-2 z-50 relative">
+    <div
+      className="w-full px-6 md:px-12 pt-2 flex flex-col gap-2 z-50 relative"
+      // iOS: 预留 home indicator 的安全区；部分浏览器对 tailwind arbitrary env()/max() 解析不稳定，使用 inline 更可靠
+      style={{ paddingBottom: 'calc(2rem + env(safe-area-inset-bottom))' }}
+    >
       
       {/* Control Icons Row - Moved above progress bar */}
       <div className="flex items-center justify-between mb-2">

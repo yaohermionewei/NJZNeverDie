@@ -53,6 +53,25 @@ const App: React.FC = () => {
   const [smallLyricTop, setSmallLyricTop] = useState<number | null>(null);
   const [smallLyricMaxHeight, setSmallLyricMaxHeight] = useState<number | null>(null);
   
+  // iOS/移动端：使用 VisualViewport 拿到“真实可见高度”，避免底部浏览器栏覆盖内容
+  useEffect(() => {
+    const vv = window.visualViewport;
+    const syncViewport = () => {
+      const h = vv?.height ?? window.innerHeight;
+      // round to avoid sub-pixel thrash in layout
+      document.documentElement.style.setProperty('--app-height', `${Math.round(h)}px`);
+    };
+    syncViewport();
+    window.addEventListener('resize', syncViewport);
+    vv?.addEventListener('resize', syncViewport);
+    vv?.addEventListener('scroll', syncViewport);
+    return () => {
+      window.removeEventListener('resize', syncViewport);
+      vv?.removeEventListener('resize', syncViewport);
+      vv?.removeEventListener('scroll', syncViewport);
+    };
+  }, []);
+  
   // Get current song info from registry
   const currentSong = useMemo(() => getSongById(currentSongId) || getDefaultSong(), [currentSongId]);
 
@@ -449,7 +468,10 @@ const App: React.FC = () => {
   }, [theme, isUIHidden, currentSongId]);
 
   return (
-    <div className="relative w-full h-screen h-[100dvh] bg-gray-50 overflow-hidden flex flex-col font-sans selection:bg-[#ff4d6a] selection:text-white">
+    <div
+      className="relative w-full bg-gray-50 overflow-hidden flex flex-col font-sans selection:bg-[#ff4d6a] selection:text-white"
+      style={{ height: 'var(--app-height, 100vh)' }}
+    >
       
       {/* Vinyl 背景模糊层：常驻挂载 + inline blur，避免 Tailwind CDN 首次进入时 blur 类“现编译”导致的露馅闪屏 */}
       <div
