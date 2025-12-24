@@ -78,6 +78,7 @@ const Controls: React.FC<ControlsProps> = ({
   // Progress scrubbing (desktop bugfix): while user drags, keep a local value so audio timeupdate
   // can't "snap back" the controlled range input.
   const [isScrubbing, setIsScrubbing] = React.useState(false);
+  const isScrubbingRef = React.useRef(false);
   const [scrubTime, setScrubTime] = React.useState<number>(0);
   const scrubTimeRef = React.useRef<number>(0);
 
@@ -95,16 +96,27 @@ const Controls: React.FC<ControlsProps> = ({
     setScrubTime(v);
 
     // If we're not scrubbing (e.g. keyboard interaction), seek immediately.
-    if (!isScrubbing) {
+    if (!isScrubbingRef.current) {
       onSeek(v);
     }
   };
 
-  const startScrub = (e: React.PointerEvent<HTMLInputElement>) => {
-    const el = e.currentTarget;
-    const v = clampToDuration(Number(el.value));
+  const updateScrubFromPointer = (el: HTMLInputElement, clientX: number) => {
+    if (!Number.isFinite(duration) || duration <= 0) return;
+    const rect = el.getBoundingClientRect();
+    const pct = rect.width > 0 ? (clientX - rect.left) / rect.width : 0;
+    const v = clampToDuration(pct * duration);
     scrubTimeRef.current = v;
     setScrubTime(v);
+  };
+
+  const startScrub = (e: React.PointerEvent<HTMLInputElement>) => {
+    // Prevent browser gesture/scroll from stealing the pointer during scrubbing on mobile.
+    e.preventDefault();
+    const el = e.currentTarget;
+    isScrubbingRef.current = true;
+    // Immediately set value based on pointer position (more reliable than relying on native range thumb).
+    updateScrubFromPointer(el, e.clientX);
     setIsScrubbing(true);
     // Keep receiving pointer events even if the pointer leaves the track.
     try {
@@ -114,8 +126,14 @@ const Controls: React.FC<ControlsProps> = ({
     }
   };
 
+  const moveScrub = (e: React.PointerEvent<HTMLInputElement>) => {
+    if (!isScrubbingRef.current) return;
+    updateScrubFromPointer(e.currentTarget, e.clientX);
+  };
+
   const endScrub = () => {
-    if (!isScrubbing) return;
+    if (!isScrubbingRef.current) return;
+    isScrubbingRef.current = false;
     setIsScrubbing(false);
     onSeek(clampToDuration(scrubTimeRef.current));
   };
@@ -215,9 +233,13 @@ const Controls: React.FC<ControlsProps> = ({
             value={displayTime} 
             onChange={handleSeekChange}
             onPointerDown={startScrub}
+            onPointerMove={moveScrub}
             onPointerUp={endScrub}
             onPointerCancel={endScrub}
-            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-20"
+            // Mobile: increase hit area without changing visual thickness.
+            // Keep the visual track at 3px, but make the invisible input tall and centered.
+            className="absolute left-0 right-0 top-1/2 -translate-y-1/2 w-full h-8 opacity-0 cursor-pointer z-20 touch-none"
+            style={{ touchAction: 'none' }}
           />
           {/* Track Background */}
           <div className={`absolute top-0 left-0 h-full rounded-full w-full ${darkUI ? 'bg-white/20' : 'bg-black/15'}`}></div>
