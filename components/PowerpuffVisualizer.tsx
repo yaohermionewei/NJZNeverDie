@@ -110,6 +110,11 @@ const DEER_HEIGHT_RATIO = 0.65; // Between gingerman (0.455) and rabbit (0.875)
 // Animation settings
 const FRAME_DURATION = 12; // Switch frame every N render frames (~200ms at 60fps)
 
+// Time-step configuration (frame-rate independent)
+// We align dt scaling to your current desktop feel (ProMotion typically ~120fps).
+const REF_FPS = 120;
+const MAX_DT = 1 / 30; // clamp to avoid huge jumps on background/tab-switch or frame spikes
+
 // Character configuration (X-shape formation)
 // Positioned more towards right
 const CHARACTERS = [
@@ -537,6 +542,19 @@ const PowerpuffVisualizer: React.FC<PowerpuffVisualizerProps> = ({ analyser, isP
     const sampleRate = analyser?.context?.sampleRate || 44100;
     const fftSize = analyser?.fftSize || 2048;
 
+    // ---- dt core (frame-rate independent) ----
+    let lastNow = performance.now();
+    let tSec = 0; // accumulated seconds (replaces Date.now() usage for stable phase)
+
+    const resetClock = () => {
+      lastNow = performance.now();
+    };
+    const onVisibilityChange = () => {
+      // Prevent a huge dt on the first frame after returning to foreground
+      if (!document.hidden) resetClock();
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+
     // Helper function to draw a parallax layer with seamless looping
     const drawParallaxLayer = (
       images: HTMLImageElement[],
@@ -586,7 +604,17 @@ const PowerpuffVisualizer: React.FC<PowerpuffVisualizerProps> = ({ analyser, isP
 
     const draw = () => {
       animationRef.current = requestAnimationFrame(draw);
-      frameCountRef.current++;
+
+      const now = performance.now();
+      let dt = (now - lastNow) / 1000;
+      lastNow = now;
+      if (!Number.isFinite(dt) || dt < 0) dt = 0;
+      if (dt > MAX_DT) dt = MAX_DT;
+      const frameScale = dt * REF_FPS;
+      tSec += dt;
+
+      // Keep old "frame counter" semantics by counting in REF_FPS-frames.
+      frameCountRef.current += frameScale;
 
       const rect = canvas.getBoundingClientRect();
       const width = rect.width;
@@ -595,9 +623,9 @@ const PowerpuffVisualizer: React.FC<PowerpuffVisualizerProps> = ({ analyser, isP
       // Update parallax offsets only when playing
       if (isPlaying) {
         const speed = params.sceneSpeed || 1.0;
-        bottomOffsetRef.current += BOTTOM_SPEED * speed;
-        middleOffsetRef.current += MIDDLE_SPEED * speed;
-        topOffsetRef.current += TOP_SPEED * speed;
+        bottomOffsetRef.current += BOTTOM_SPEED * speed * frameScale;
+        middleOffsetRef.current += MIDDLE_SPEED * speed * frameScale;
+        topOffsetRef.current += TOP_SPEED * speed * frameScale;
       }
 
       // Clear canvas
@@ -625,16 +653,17 @@ const PowerpuffVisualizer: React.FC<PowerpuffVisualizerProps> = ({ analyser, isP
         }
 
         // Advance fade state machine.
-        const FADE_STEP = 0.04; // ~0.4s for full fade @60fps
+        // FADE_STEP is tuned per-frame on desktop; scale by frameScale to keep seconds consistent.
+        const FADE_STEP = 0.04;
         if (o.phase === 'fadeOut') {
-          o.alpha = Math.max(0, o.alpha - FADE_STEP);
+          o.alpha = Math.max(0, o.alpha - FADE_STEP * frameScale);
           if (o.alpha <= 0.01) {
             if (o.nextLyric) o.currentLyric = o.nextLyric;
             o.nextLyric = null;
             o.phase = 'fadeIn';
           }
         } else if (o.phase === 'fadeIn') {
-          o.alpha = Math.min(1, o.alpha + FADE_STEP);
+          o.alpha = Math.min(1, o.alpha + FADE_STEP * frameScale);
           if (o.alpha >= 0.99) {
             o.alpha = 1;
             o.phase = 'idle';
@@ -654,7 +683,7 @@ const PowerpuffVisualizer: React.FC<PowerpuffVisualizerProps> = ({ analyser, isP
 
         // Gentle floating (not tied to sceneSpeed).
         // Slower, smoother, and larger amplitude for a "floating balloon" feel.
-        const t = Date.now() * 0.001;
+        const t = tSec;
         
         // Lyric: Main floater (larger amplitude)
         // Horizontal: ±12px
@@ -863,9 +892,9 @@ const PowerpuffVisualizer: React.FC<PowerpuffVisualizerProps> = ({ analyser, isP
         // Draw gingerbread man (attached to bottom3 specifically)
         if (gingermanLoadedRef.current && gingermanImagesRef.current.length > 0 && bottomImagesRef.current.length >= 3) {
           // Update gingerman animation frame
-          gingermanTimerRef.current++;
-          if (gingermanTimerRef.current >= GINGERMAN_FRAME_DURATION) {
-            gingermanTimerRef.current = 0;
+          gingermanTimerRef.current += frameScale;
+          while (gingermanTimerRef.current >= GINGERMAN_FRAME_DURATION) {
+            gingermanTimerRef.current -= GINGERMAN_FRAME_DURATION;
             gingermanFrameRef.current = (gingermanFrameRef.current + 1) % GINGERMAN_FRAMES.length;
           }
           
@@ -930,9 +959,9 @@ const PowerpuffVisualizer: React.FC<PowerpuffVisualizerProps> = ({ analyser, isP
           bottomImagesRef.current[2].width > 0
         ) {
           // Update rabbit animation frame
-          rabbitTimerRef.current++;
-          if (rabbitTimerRef.current >= RABBIT_FRAME_DURATION) {
-            rabbitTimerRef.current = 0;
+          rabbitTimerRef.current += frameScale;
+          while (rabbitTimerRef.current >= RABBIT_FRAME_DURATION) {
+            rabbitTimerRef.current -= RABBIT_FRAME_DURATION;
             rabbitFrameRef.current = (rabbitFrameRef.current + 1) % RABBIT_FRAMES.length;
           }
           
@@ -987,9 +1016,9 @@ const PowerpuffVisualizer: React.FC<PowerpuffVisualizerProps> = ({ analyser, isP
           bottomImagesRef.current[2].width > 0
         ) {
           // Update deer animation frame
-          deerTimerRef.current++;
-          if (deerTimerRef.current >= DEER_FRAME_DURATION) {
-            deerTimerRef.current = 0;
+          deerTimerRef.current += frameScale;
+          while (deerTimerRef.current >= DEER_FRAME_DURATION) {
+            deerTimerRef.current -= DEER_FRAME_DURATION;
             deerFrameRef.current = (deerFrameRef.current + 1) % DEER_FRAMES.length;
           }
           
@@ -1075,8 +1104,11 @@ const PowerpuffVisualizer: React.FC<PowerpuffVisualizerProps> = ({ analyser, isP
       // Update and draw snowflakes (always animate, regardless of music state)
       snowflakesRef.current.forEach((flake) => {
         // Update position
-        flake.y += flake.speedY;
-        flake.x += flake.speedX + Math.sin(frameCountRef.current * 0.02 + flake.swayOffset) * SNOW_SWAY_AMOUNT * 0.1;
+        flake.y += flake.speedY * frameScale;
+        // Treat drift + sway as per-frame velocities and scale by frameScale for dt equivalence.
+        const swayPhase = tSec * (0.02 * REF_FPS) + flake.swayOffset;
+        const swayVel = Math.sin(swayPhase) * SNOW_SWAY_AMOUNT * 0.1;
+        flake.x += (flake.speedX + swayVel) * frameScale;
 
         // Wrap around when off screen
         if (flake.y > height + flake.size) {
@@ -1168,10 +1200,13 @@ const PowerpuffVisualizer: React.FC<PowerpuffVisualizerProps> = ({ analyser, isP
         
         // Update baseline
         if (currentEnergy > currentBaseline) {
-          baselineRef.current[i] = currentBaseline + (currentEnergy - currentBaseline) * BASELINE_ATTACK;
+          // BASELINE_ATTACK is a per-frame rate tuned on desktop; convert to dt-equivalent.
+          const attackAlpha = 1 - Math.pow(1 - BASELINE_ATTACK, frameScale);
+          baselineRef.current[i] = currentBaseline + (currentEnergy - currentBaseline) * attackAlpha;
         } else {
           const decayRate = isQuiet ? 0.0002 : BASELINE_DECAY;
-          baselineRef.current[i] = currentBaseline + (currentEnergy - currentBaseline) * decayRate;
+          const decayAlpha = 1 - Math.pow(1 - decayRate, frameScale);
+          baselineRef.current[i] = currentBaseline + (currentEnergy - currentBaseline) * decayAlpha;
         }
         
         // Calculate delta
@@ -1198,9 +1233,11 @@ const PowerpuffVisualizer: React.FC<PowerpuffVisualizerProps> = ({ analyser, isP
         const displacement = targetValue - currentDisplay;
         const springForce = displacement * SPRING_STIFFNESS;
         
-        velocityRef.current[i] = currentVelocity + springForce;
-        velocityRef.current[i] *= (params.friction || 0.94);
-        displayValuesRef.current[i] = currentDisplay + velocityRef.current[i];
+        // Spring integration in REF_FPS-frame units, scaled by frameScale to be dt-stable.
+        velocityRef.current[i] = currentVelocity + springForce * frameScale;
+        const friction = params.friction ?? 0.94;
+        velocityRef.current[i] *= Math.pow(friction, frameScale);
+        displayValuesRef.current[i] = currentDisplay + velocityRef.current[i] * frameScale;
         
         // Soft bounds
         if (displayValuesRef.current[i] < 0) {
@@ -1215,13 +1252,13 @@ const PowerpuffVisualizer: React.FC<PowerpuffVisualizerProps> = ({ analyser, isP
 
       // Update frame animation timer (for animated characters)
       // TODO: When finalized, only animate when isPlaying is true
-      frameTimerRef.current++;
-      if (frameTimerRef.current >= FRAME_DURATION) {
-        frameTimerRef.current = 0;
+      frameTimerRef.current += frameScale;
+      while (frameTimerRef.current >= FRAME_DURATION) {
+        frameTimerRef.current -= FRAME_DURATION;
         // Advance frame for all animated characters
         CHARACTERS.forEach((char, index) => {
           if (char.isAnimated && char.frames.length > 1) {
-            frameIndicesRef.current[index] = 
+            frameIndicesRef.current[index] =
               (frameIndicesRef.current[index] + 1) % char.frames.length;
           }
         });
@@ -1295,7 +1332,7 @@ const PowerpuffVisualizer: React.FC<PowerpuffVisualizerProps> = ({ analyser, isP
         if (stars) {
           stars.forEach(star => {
             // Update star position (move left)
-            star.relativeX -= star.speed / totalTrailLength;
+            star.relativeX -= (star.speed / totalTrailLength) * frameScale;
             
             // Shrink and fade as it moves left
             const distanceFromRight = 1 - star.relativeX;
@@ -1391,6 +1428,7 @@ const PowerpuffVisualizer: React.FC<PowerpuffVisualizerProps> = ({ analyser, isP
 
     return () => {
       window.removeEventListener('resize', handleResize);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
       cancelAnimationFrame(animationRef.current);
     };
   }, [analyser, isPlaying, params, getFrequencyRangeEnergy]);
