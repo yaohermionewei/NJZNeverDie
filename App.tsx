@@ -19,6 +19,152 @@ import { SONGS, getSongById, getDefaultSong } from './songRegistry';
 import { parseLrc } from './utils/lrcParser';
 import { LyricLine, ThemeMode, VinylParams } from './types';
 
+// ===== Hidden-UI two-line lyric renderer (mobile-safe wrap gating) =====
+// Used by Cubes/Particle themes when UI is hidden.
+// Rule: if a line wraps to 2 lines, it occupies both rows and the other line is hidden (prevents overlap).
+const HIDDEN_LYRIC_LINE_HEIGHT_PX = 26;
+const HIDDEN_LYRIC_BLOCK_HEIGHT_PX = HIDDEN_LYRIC_LINE_HEIGHT_PX * 2;
+
+function clamp01(n: number) {
+  return Math.max(0, Math.min(1, n));
+}
+
+const HiddenTwoLineLyric: React.FC<{
+  prevText: string;
+  currentText: string;
+  align: 'left' | 'center';
+  paddingClassName?: string;
+  prevColor: string;
+  currentColor: string;
+  prevOpacity: number;
+  currentOpacity: number;
+}> = ({
+  prevText,
+  currentText,
+  align,
+  paddingClassName,
+  prevColor,
+  currentColor,
+  prevOpacity,
+  currentOpacity
+}) => {
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const measurePrevRef = useRef<HTMLDivElement | null>(null);
+  const measureCurrentRef = useRef<HTMLDivElement | null>(null);
+  const [containerWidth, setContainerWidth] = useState(0);
+  const [prevWraps, setPrevWraps] = useState(false);
+  const [currentWraps, setCurrentWraps] = useState(false);
+
+  useLayoutEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const measure = () => setContainerWidth(el.clientWidth);
+    measure();
+    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(() => measure()) : null;
+    ro?.observe(el);
+    window.addEventListener('resize', measure);
+    return () => {
+      ro?.disconnect();
+      window.removeEventListener('resize', measure);
+    };
+  }, []);
+
+  useLayoutEffect(() => {
+    const p = measurePrevRef.current;
+    const c = measureCurrentRef.current;
+    if (!p || !c) return;
+    const pWrap = (p.scrollHeight ?? 0) > HIDDEN_LYRIC_LINE_HEIGHT_PX + 1;
+    const cWrap = (c.scrollHeight ?? 0) > HIDDEN_LYRIC_LINE_HEIGHT_PX + 1;
+    setPrevWraps(pWrap);
+    setCurrentWraps(cWrap);
+  }, [prevText, currentText, containerWidth]);
+
+  const showPrev = (prevText ?? '').trim().length > 0;
+  const showCurrent = (currentText ?? '').trim().length > 0;
+
+  const mode: 'prev2' | 'current2' | 'twoLines' | 'none' =
+    showPrev && prevWraps ? 'prev2'
+      : showCurrent && currentWraps ? 'current2'
+        : (showPrev || showCurrent) ? 'twoLines'
+          : 'none';
+
+  if (mode === 'none') return null;
+
+  const baseTextClass =
+    `text-[16px] font-normal leading-[${HIDDEN_LYRIC_LINE_HEIGHT_PX}px] transition-all duration-700 ease-[cubic-bezier(0.2,0.8,0.2,1)]`;
+  const alignClass = align === 'left' ? 'text-left' : 'text-center';
+  const paddingClass = paddingClassName ?? '';
+
+  const clamp2Style: React.CSSProperties = {
+    display: '-webkit-box',
+    WebkitBoxOrient: 'vertical' as any,
+    WebkitLineClamp: 2 as any,
+    overflow: 'hidden',
+    whiteSpace: 'normal',
+    wordBreak: 'break-word'
+  };
+
+  const clamp1Class = 'truncate';
+
+  return (
+    <div
+      ref={containerRef}
+      className={`relative w-full overflow-hidden ${alignClass} ${paddingClass}`}
+      style={{ height: `${HIDDEN_LYRIC_BLOCK_HEIGHT_PX}px` }}
+    >
+      {/* invisible measurers (same width + typography) */}
+      <div className="absolute inset-0 pointer-events-none opacity-0" aria-hidden="true">
+        <div ref={measurePrevRef} className={baseTextClass} style={{ lineHeight: `${HIDDEN_LYRIC_LINE_HEIGHT_PX}px` }}>
+          {prevText}
+        </div>
+        <div ref={measureCurrentRef} className={baseTextClass} style={{ lineHeight: `${HIDDEN_LYRIC_LINE_HEIGHT_PX}px` }}>
+          {currentText}
+        </div>
+      </div>
+
+      {mode === 'twoLines' && (
+        <div className="relative">
+          <div
+            className={`${baseTextClass} ${clamp1Class}`}
+            style={{ height: `${HIDDEN_LYRIC_LINE_HEIGHT_PX}px`, opacity: clamp01(prevOpacity), color: prevColor }}
+          >
+            {prevText}
+          </div>
+          <div
+            className={`${baseTextClass} ${clamp1Class}`}
+            style={{ height: `${HIDDEN_LYRIC_LINE_HEIGHT_PX}px`, opacity: clamp01(currentOpacity), color: currentColor }}
+          >
+            {currentText}
+          </div>
+        </div>
+      )}
+
+      {mode === 'prev2' && (
+        <div
+          className={baseTextClass}
+          style={{ height: `${HIDDEN_LYRIC_BLOCK_HEIGHT_PX}px`, opacity: clamp01(prevOpacity), color: prevColor, ...clamp2Style }}
+        >
+          {prevText}
+        </div>
+      )}
+
+      {mode === 'current2' && (
+        <div
+          className={baseTextClass}
+          style={{
+            height: `${HIDDEN_LYRIC_BLOCK_HEIGHT_PX}px`,
+            opacity: clamp01(currentOpacity),
+            color: currentColor,
+            ...clamp2Style
+          }}
+        >
+          {currentText}
+        </div>
+      )}
+    </div>
+  );
+};
+
 // Preload Cubes theme rabbit images (default theme - load immediately)
 import rabbitImg from './assets/rabbit.webp';
 import rabbitFlyUpImg from './assets/rabbitflyup.webp';
@@ -365,6 +511,8 @@ const App: React.FC = () => {
     if (audioRef.current) {
       audioRef.current.currentTime = time;
       setCurrentTime(time);
+      // Keep throttle refs consistent with user-initiated seeks to prevent "snap back".
+      lastTimeUpdateRef.current = time;
       // 如果当前是暂停状态，自动开始播放
       if (!isPlaying) {
         audioRef.current.play();
@@ -553,28 +701,17 @@ const App: React.FC = () => {
            {/* 新增：隐藏 UI 时的居中歌词与歌曲信息 */}
            {isUIHidden && (
              <div className="absolute bottom-12 left-0 right-0 z-20 flex flex-col items-center pointer-events-none animate-in fade-in duration-500">
-               {/* 滚动歌词容器 */}
-               <div className="h-[52px] overflow-hidden relative text-center w-full px-10">
-                 <div 
-                   className="transition-transform duration-700 cubic-bezier(0.2, 0.8, 0.2, 1)"
-                   style={{ 
-                     transform: `translateY(-${Math.max(0, currentIndex - 1) * 26}px)` 
-                   }}
-                 >
-                   {lyrics.map((line, index) => (
-                     <div 
-                       key={index}
-                       className="h-[26px] text-[16px] font-normal leading-[26px] transition-all duration-700 cubic-bezier(0.2, 0.8, 0.2, 1)"
-                       style={{ 
-                         opacity: index === currentIndex ? 0.7 : index === currentIndex - 1 ? 0.4 : 0,
-                         color: 'white'
-                       }}
-                     >
-                       {line.text}
-                     </div>
-                   ))}
-                 </div>
-               </div>
+               {/* 两行歌词（手机端折行安全：若上一句折行，则下一句延后显示） */}
+               <HiddenTwoLineLyric
+                 prevText={prevLyric}
+                 currentText={currentLyric}
+                 align="center"
+                 paddingClassName="px-10"
+                 prevColor="white"
+                 currentColor="white"
+                 prevOpacity={0.4}
+                 currentOpacity={0.7}
+               />
 
                {/* 歌曲信息 */}
                <div className="text-[14px] text-white/30 font-normal mt-4 text-center">
@@ -605,28 +742,16 @@ const App: React.FC = () => {
            {/* Hidden UI Lyrics & Song Info (Bottom Left) */}
            {isUIHidden && (
              <div className="absolute bottom-12 left-12 z-20 flex flex-col pointer-events-none animate-in fade-in duration-500">
-               {/* Scrolling Lyrics Container */}
-               <div className="h-[52px] overflow-hidden relative">
-                 <div 
-                   className="transition-transform duration-700 cubic-bezier(0.2, 0.8, 0.2, 1)"
-                   style={{ 
-                     transform: `translateY(-${Math.max(0, currentIndex - 1) * 26}px)` 
-                   }}
-                 >
-                   {lyrics.map((line, index) => (
-                     <div 
-                       key={index}
-                       className="h-[26px] text-[16px] font-normal leading-[26px] transition-all duration-700 cubic-bezier(0.2, 0.8, 0.2, 1)"
-                       style={{ 
-                         opacity: index === currentIndex ? 1 : index === currentIndex - 1 ? 0.4 : 0,
-                         color: index === currentIndex ? currentSong.themeColor : 'black'
-                       }}
-                     >
-                       {line.text}
-              </div>
-                   ))}
-              </div>
-           </div>
+               {/* 两行歌词（手机端折行安全：若上一句折行，则下一句延后显示） */}
+               <HiddenTwoLineLyric
+                 prevText={prevLyric}
+                 currentText={currentLyric}
+                 align="left"
+                 prevColor="black"
+                 currentColor={currentSong.themeColor}
+                 prevOpacity={0.4}
+                 currentOpacity={1}
+               />
 
           {/* Song Info */}
               <div className="text-[14px] text-black/20 font-normal mt-4">

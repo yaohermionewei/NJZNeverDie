@@ -74,9 +74,50 @@ const Controls: React.FC<ControlsProps> = ({
   const darkUI = isDarkTheme(theme);
   const isCubes = theme === 'cubes';
   const { t } = useTranslation();
-  
+
+  // Progress scrubbing (desktop bugfix): while user drags, keep a local value so audio timeupdate
+  // can't "snap back" the controlled range input.
+  const [isScrubbing, setIsScrubbing] = React.useState(false);
+  const [scrubTime, setScrubTime] = React.useState<number>(0);
+  const scrubTimeRef = React.useRef<number>(0);
+
+  const clampToDuration = (v: number) => {
+    if (!Number.isFinite(v)) return 0;
+    if (!duration || !Number.isFinite(duration) || duration <= 0) return Math.max(0, v);
+    return Math.min(Math.max(0, v), duration);
+  };
+
+  const displayTime = isScrubbing ? scrubTime : currentTime;
+
   const handleSeekChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    onSeek(Number(e.target.value));
+    const v = clampToDuration(Number(e.target.value));
+    scrubTimeRef.current = v;
+    setScrubTime(v);
+
+    // If we're not scrubbing (e.g. keyboard interaction), seek immediately.
+    if (!isScrubbing) {
+      onSeek(v);
+    }
+  };
+
+  const startScrub = (e: React.PointerEvent<HTMLInputElement>) => {
+    const el = e.currentTarget;
+    const v = clampToDuration(Number(el.value));
+    scrubTimeRef.current = v;
+    setScrubTime(v);
+    setIsScrubbing(true);
+    // Keep receiving pointer events even if the pointer leaves the track.
+    try {
+      el.setPointerCapture(e.pointerId);
+    } catch {
+      // ignore
+    }
+  };
+
+  const endScrub = () => {
+    if (!isScrubbing) return;
+    setIsScrubbing(false);
+    onSeek(clampToDuration(scrubTimeRef.current));
   };
 
   return (
@@ -165,14 +206,17 @@ const Controls: React.FC<ControlsProps> = ({
       <div className={`flex items-center gap-3 w-full max-w-3xl mx-auto text-xs font-medium transition-colors ${
         darkUI ? 'text-white/40 hover:text-white/60' : 'text-black/40 hover:text-black/60'
       }`}>
-        <span className="w-10 text-right tabular-nums">{formatTime(currentTime)}</span>
+        <span className="w-10 text-right tabular-nums">{formatTime(displayTime)}</span>
         <div className="relative flex-1 h-[3px] group cursor-pointer flex items-center">
            <input 
             type="range" 
             min={0} 
             max={duration || 100} 
-            value={currentTime} 
+            value={displayTime} 
             onChange={handleSeekChange}
+            onPointerDown={startScrub}
+            onPointerUp={endScrub}
+            onPointerCancel={endScrub}
             className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-20"
           />
           {/* Track Background */}
@@ -181,7 +225,7 @@ const Controls: React.FC<ControlsProps> = ({
           {/* Progress Fill */}
           <div 
             className={`absolute top-0 left-0 h-full rounded-full transition-all duration-100 ${darkUI ? 'bg-white' : 'bg-black/70'}`}
-            style={{ width: `${duration ? (currentTime / duration) * 100 : 0}%` }}
+            style={{ width: `${duration ? (displayTime / duration) * 100 : 0}%` }}
           ></div>
           
           {/* Drag Handle - vinyl 用胡萝卜，其他用圆形；触屏设备始终显示，桌面端 hover 才显示 */}
@@ -190,14 +234,14 @@ const Controls: React.FC<ControlsProps> = ({
               src={carrot}
               alt=""
               className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-5 h-5 object-contain opacity-100 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 transition-opacity pointer-events-none drop-shadow-sm"
-              style={{ left: `${duration ? (currentTime / duration) * 100 : 0}%` }}
+              style={{ left: `${duration ? (displayTime / duration) * 100 : 0}%` }}
             />
           ) : (
             <div 
               className={`absolute top-1/2 -translate-y-1/2 w-2.5 h-2.5 rounded-full shadow-md opacity-100 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 transition-opacity pointer-events-none ${
                 darkUI ? 'bg-white border border-white/20' : 'bg-white border border-black/10'
               }`}
-              style={{ left: `${duration ? (currentTime / duration) * 100 : 0}%` }}
+              style={{ left: `${duration ? (displayTime / duration) * 100 : 0}%` }}
             />
           )}
         </div>
