@@ -7,7 +7,7 @@ import { useTranslation } from 'react-i18next';
 const DEFAULT_PARAMS: CubesParams = {
   height: 0.9,
   spread: 1.5,
-  damping: 0.19,
+  damping: 0.25,
   showRabbits: true
 };
 

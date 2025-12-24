@@ -69,6 +69,27 @@ const MAX_HEIGHT = 6.0;
 const RABBIT_Y_OFFSET = 0.6; // feet sit on cube top (increased from 0.4 for larger sprite)
 const MAX_RABBIT_HEIGHT = 6.0; // safety cap above cube top to prevent numeric explosions
 
+// Rabbit motion calibration:
+// Keep the legacy “desktop feel” (which on modern MacBooks often runs at ~120fps / ProMotion)
+// consistent across devices by converting old per-frame constants into per-second units.
+const RABBIT_REF_FPS = 120;
+const RABBIT_AIR_DAMP_PER_FRAME = 0.97;
+const RABBIT_GRAVITY_PER_FRAME = 0.015;
+const RABBIT_JUMP_TRIGGER_DY_PER_FRAME = 0.06;
+const RABBIT_POP_VY_PER_FRAME = 0.15;
+const RABBIT_BOUNCE_STOP_VY_PER_FRAME = 0.03;
+const RABBIT_BOUNCE_DAMPING = 0.15;
+
+const RABBIT_JUMP_TRIGGER_VY_PER_SEC = RABBIT_JUMP_TRIGGER_DY_PER_FRAME * RABBIT_REF_FPS; // units/sec
+const RABBIT_POP_VY_PER_SEC = RABBIT_POP_VY_PER_FRAME * RABBIT_REF_FPS; // units/sec
+const RABBIT_BOUNCE_STOP_VY_PER_SEC = RABBIT_BOUNCE_STOP_VY_PER_FRAME * RABBIT_REF_FPS; // units/sec
+const RABBIT_GRAVITY_PER_SEC2 = RABBIT_GRAVITY_PER_FRAME * RABBIT_REF_FPS * RABBIT_REF_FPS; // units/sec^2
+const RABBIT_AIR_DAMP_LOG_PER_SEC = Math.log(RABBIT_AIR_DAMP_PER_FRAME) * RABBIT_REF_FPS; // for exp(log(d)*dt)
+
+// Time-step configuration (frame-rate independent)
+const BASELINE_FPS = 60;
+const MAX_DT = 1 / 30; // clamp to avoid huge jumps on background/tab-switch or frame spikes
+
 // Vertex Shader: Pass world Y position AND world normal to fragment shader
 const vertexShader = `
   varying float vWorldY;
@@ -417,8 +438,29 @@ const CubesVisualizer: React.FC<CubesVisualizerProps> = ({
     const halfGrid = (GRID_SIZE - 1) * CUBE_SPACING / 2;
     const maxDistance = Math.sqrt(halfGrid * halfGrid + halfGrid * halfGrid);
 
+    // Use a stable time source + dt clamp to make motion frame-rate independent.
+    let lastNow = performance.now();
+    let t = 0; // accumulated seconds for idle/noise time
+
+    const resetClock = () => {
+      lastNow = performance.now();
+    };
+    const onVisibilityChange = () => {
+      // Prevent a huge dt on the first frame after returning to foreground
+      if (!document.hidden) resetClock();
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+
     const animate = () => {
       animationIdRef.current = requestAnimationFrame(animate);
+
+      const now = performance.now();
+      let dt = (now - lastNow) / 1000;
+      lastNow = now;
+      if (!Number.isFinite(dt) || dt < 0) dt = 0;
+      if (dt > MAX_DT) dt = MAX_DT;
+      const frameScale = dt * BASELINE_FPS; // how many 60fps steps this tick represents
+      t += dt;
 
       // Keep background full-screen; only shift the framing up to avoid overlapping bottom controls.
       // IMPORTANT: Do NOT move the scene in world space, because the shader colors depend on WORLD Y.
@@ -428,7 +470,9 @@ const CubesVisualizer: React.FC<CubesVisualizerProps> = ({
         const ratio = THREE.MathUtils.clamp(insetPx / h, 0, 0.5);
         // Ratio -> lookAt shift (tuned). Looking slightly lower pushes the content upward on screen.
         const targetShift = THREE.MathUtils.clamp(ratio * 6.0, 0, 2.5);
-        lookAtShiftRef.current = THREE.MathUtils.lerp(lookAtShiftRef.current, targetShift, 0.12);
+        // Time-based smoothing: keep the same feel across FPS (0.12 tuned for ~60fps).
+        const camAlpha = 1 - Math.pow(1 - 0.12, frameScale);
+        lookAtShiftRef.current = THREE.MathUtils.lerp(lookAtShiftRef.current, targetShift, camAlpha);
         camera.lookAt(0, 1 - lookAtShiftRef.current, 0);
       }
 
@@ -438,7 +482,8 @@ const CubesVisualizer: React.FC<CubesVisualizerProps> = ({
 
       const audioData = audioDataRef.current;
       const count = cubes.length;
-      const time = Date.now() * 0.0005;
+      // Old: Date.now() * 0.0005 increases by 0.5 per second. Keep the same slope using accumulated time.
+      const time = t * 0.5;
         
         for (let i = 0; i < count; i++) {
         const cube = cubes[i];
@@ -472,8 +517,11 @@ const CubesVisualizer: React.FC<CubesVisualizerProps> = ({
         const targetScale = baseScale + maskedAudioValue * params.height * 10.0;
 
         const currentScale = currentScalesRef.current[i];
-        const lerpFactor = params.damping;
-        const newScale = THREE.MathUtils.lerp(currentScale, targetScale, lerpFactor);
+        // params.damping is a per-frame lerp factor (tuned for ~60fps).
+        // Convert to time-based alpha so response-per-second is consistent across FPS.
+        const lerpFactor = THREE.MathUtils.clamp(params.damping, 0, 1);
+        const alpha = 1 - Math.pow(1 - lerpFactor, frameScale);
+        const newScale = THREE.MathUtils.lerp(currentScale, targetScale, alpha);
         currentScalesRef.current[i] = newScale;
 
         // Update cube height (scale Y)
@@ -493,7 +541,11 @@ const CubesVisualizer: React.FC<CubesVisualizerProps> = ({
           rabbit.sprite.visible = params.showRabbits;
           const cubeTopY = newScale;
           const targetTopY = cubeTopY + RABBIT_Y_OFFSET;
-          const cubeVelocityY = newScale - oldScaleY;
+          // Rabbit physics runs in units/sec to be frame-rate independent.
+          const dtSec = dt;
+          // Cube top velocity (units/sec) for jump trigger & initial impulse.
+          const cubeDeltaY = newScale - oldScaleY;
+          const cubeTopVelPerSec = dtSec > 0 ? (cubeDeltaY / dtSec) : 0;
           
           // When NOT playing: freeze rabbit completely on cube top
           if (!isPlaying) {
@@ -503,19 +555,19 @@ const CubesVisualizer: React.FC<CubesVisualizerProps> = ({
             rabbit.sprite.material.map = rabbit.textures.idle;
           } else {
             // Only trigger jump when cube rises significantly
-            if (cubeVelocityY > 0.06 && !rabbit.isJumping) {
-              // Vital Fix: Rabbit velocity must be GREATER than cube velocity to "break away"
-              // Add a small constant "pop" so it always lifts off
-              rabbit.velocityY = cubeVelocityY + 0.15; 
+            if (cubeTopVelPerSec > RABBIT_JUMP_TRIGGER_VY_PER_SEC && !rabbit.isJumping) {
+              // Initial impulse = cube's upward velocity + a constant "pop"
+              rabbit.velocityY = cubeTopVelPerSec + RABBIT_POP_VY_PER_SEC;
               rabbit.isJumping = true;
             }
             
             if (rabbit.isJumping) {
-              // Air resistance (damping)
-              rabbit.velocityY *= 0.97;
-              // Gravity
-              rabbit.velocityY -= 0.015;
-              rabbit.sprite.position.y += rabbit.velocityY;
+              // Air resistance (exponential decay, frame-rate independent)
+              rabbit.velocityY *= Math.exp(RABBIT_AIR_DAMP_LOG_PER_SEC * dtSec);
+              // Gravity (units/sec^2)
+              rabbit.velocityY -= RABBIT_GRAVITY_PER_SEC2 * dtSec;
+              // Integrate position
+              rabbit.sprite.position.y += rabbit.velocityY * dtSec;
               
               // Switch texture based on vertical direction
               if (rabbit.velocityY > 0) {
@@ -529,8 +581,8 @@ const CubesVisualizer: React.FC<CubesVisualizerProps> = ({
                 rabbit.sprite.position.y = targetTopY;
                 
                 // If hitting hard enough, tiny bounce, otherwise stay
-                if (Math.abs(rabbit.velocityY) > 0.03) {
-                  rabbit.velocityY = -rabbit.velocityY * 0.15; // Damping
+                if (Math.abs(rabbit.velocityY) > RABBIT_BOUNCE_STOP_VY_PER_SEC) {
+                  rabbit.velocityY = -rabbit.velocityY * RABBIT_BOUNCE_DAMPING;
                 } else {
                   rabbit.velocityY = 0;
                   rabbit.isJumping = false;
@@ -539,6 +591,7 @@ const CubesVisualizer: React.FC<CubesVisualizerProps> = ({
               }
             } else {
               // Stick to cube top
+              rabbit.velocityY = 0;
               rabbit.sprite.position.y = targetTopY;
               rabbit.sprite.material.map = rabbit.textures.idle;
             }
@@ -567,6 +620,7 @@ const CubesVisualizer: React.FC<CubesVisualizerProps> = ({
       if (animationIdRef.current) {
         cancelAnimationFrame(animationIdRef.current);
       }
+      document.removeEventListener('visibilitychange', onVisibilityChange);
     };
   }, [analyser, isPlaying, params]);
 
