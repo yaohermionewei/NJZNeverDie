@@ -73,12 +73,12 @@ const MAX_RABBIT_HEIGHT = 6.0; // safety cap above cube top to prevent numeric e
 // Keep the legacy “desktop feel” (which on modern MacBooks often runs at ~120fps / ProMotion)
 // consistent across devices by converting old per-frame constants into per-second units.
 const RABBIT_REF_FPS = 120;
-const RABBIT_AIR_DAMP_PER_FRAME = 0.97;
+const RABBIT_AIR_DAMP_PER_FRAME = 0.985;
 const RABBIT_GRAVITY_PER_FRAME = 0.015;
-const RABBIT_JUMP_TRIGGER_DY_PER_FRAME = 0.06;
-const RABBIT_POP_VY_PER_FRAME = 0.15;
-const RABBIT_BOUNCE_STOP_VY_PER_FRAME = 0.03;
-const RABBIT_BOUNCE_DAMPING = 0.15;
+const RABBIT_JUMP_TRIGGER_DY_PER_FRAME = 0.05;
+const RABBIT_POP_VY_PER_FRAME = 0.18;
+const RABBIT_BOUNCE_STOP_VY_PER_FRAME = 0.025;
+const RABBIT_BOUNCE_DAMPING = 0.22;
 
 const RABBIT_JUMP_TRIGGER_VY_PER_SEC = RABBIT_JUMP_TRIGGER_DY_PER_FRAME * RABBIT_REF_FPS; // units/sec
 const RABBIT_POP_VY_PER_SEC = RABBIT_POP_VY_PER_FRAME * RABBIT_REF_FPS; // units/sec
