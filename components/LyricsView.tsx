@@ -127,7 +127,7 @@ const LyricsView: React.FC<LyricsViewProps> = ({ lyrics, currentTime, onLyricCli
                 onClick={() => onLyricClick?.(line.time)}
                 className={`transition-all duration-500 ease-out ${compact ? 'mb-1.5' : 'mb-4'} font-bold tracking-tight cursor-pointer text-center transform break-words whitespace-normal
                   ${isActive 
-                    ? 'text-2xl scale-100 opacity-100' 
+                    ? `${maxLines === 1 ? 'text-[22px]' : 'text-2xl'} scale-100 opacity-100` 
                     : 'text-[22px] scale-100 opacity-50 text-gray-400/50'
                   }`}
                 style={isActive ? { color: themeColor } : undefined}
@@ -164,12 +164,12 @@ const LyricsView: React.FC<LyricsViewProps> = ({ lyrics, currentTime, onLyricCli
               onClick={() => onLyricClick?.(line.time)}
               className={
                 variant === 'fullscreen'
-                  ? `transition-all duration-700 ease-out mb-10 tracking-tight cursor-pointer text-center lg:text-left origin-center lg:origin-left transform break-words whitespace-normal
+                  ? `transition-all duration-700 ease-out mb-9 tracking-tight cursor-pointer text-center lg:text-left origin-center lg:origin-left transform break-words whitespace-normal
                       ${
-                        // 高亮26px/semibold，非高亮24px/regular，差距小以降低换行跳变概率
+                        // 高亮26px/bold，非高亮24px/bold，行距36px
                         isActive
-                          ? 'text-[26px] font-semibold scale-100 opacity-100 translate-x-0'
-                          : 'text-2xl font-normal text-gray-700/70 scale-100 opacity-80 hover:opacity-100'
+                          ? 'text-[26px] font-bold scale-100 opacity-100 translate-x-0'
+                          : 'text-2xl font-bold text-gray-400/50 scale-100 opacity-100 hover:opacity-100'
                       }`
                   : `transition-all duration-700 ease-out mb-10 text-xl sm:text-2xl lg:text-4xl font-bold tracking-tight cursor-pointer text-center lg:text-left origin-center lg:origin-left transform
                       ${isActive 
