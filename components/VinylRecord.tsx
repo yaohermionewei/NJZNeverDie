@@ -95,18 +95,29 @@ const VinylRecord: React.FC<VinylRecordProps> = ({ coverUrl, isPlaying, vinylSpe
         {/* Rabbit Orbiting Container */}
         {/* 16s rotation makes it faster than the 20s vinyl rotation, creating forward motion */}
         <div 
-          className="absolute inset-0 z-50 pointer-events-none"
+          className="absolute inset-0 z-50 pointer-events-none will-change-transform"
           style={{ 
             animation: `spin ${16 / rabbitSpeed}s linear infinite`, 
             animationPlayState: isPlaying ? 'running' : 'paused' 
           }}
         >
-          <img 
-            key={skateFrame}
-            src={RABBIT_FRAMES[skateFrame]} 
-            alt="Skating Rabbit" 
-            className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-[85%] w-16 h-16 md:w-20 md:h-20 lg:w-[12%] lg:h-[12%] object-contain scale-x-[-1]"
-          />
+          {/* 
+            Mobile flicker fix:
+            - Don't remount <img> each frame (key/src swap can cause decode/blank frames on mobile Safari).
+            - Pre-render all frames stacked and toggle opacity.
+          */}
+          {RABBIT_FRAMES.map((src, idx) => (
+            <img
+              key={src}
+              src={src}
+              alt="Skating Rabbit"
+              loading="eager"
+              decoding="async"
+              className={`absolute top-0 left-1/2 -translate-x-1/2 -translate-y-[85%] w-16 h-16 md:w-20 md:h-20 lg:w-[12%] lg:h-[12%] object-contain scale-x-[-1] transition-opacity duration-75 will-change-opacity ${
+                idx === skateFrame ? 'opacity-100' : 'opacity-0'
+              }`}
+            />
+          ))}
         </div>
         
         {/* Outer Glow/Shadow - Slightly richer pink with shorter distance */}
