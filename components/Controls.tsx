@@ -89,7 +89,7 @@ const Controls: React.FC<ControlsProps> = ({
   };
 
   const displayTime = isScrubbing ? scrubTime : currentTime;
-
+  
   const handleSeekChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const v = clampToDuration(Number(e.target.value));
     scrubTimeRef.current = v;
@@ -259,10 +259,10 @@ const Controls: React.FC<ControlsProps> = ({
               style={{ left: `${duration ? (displayTime / duration) * 100 : 0}%` }}
             />
           ) : (
-            <div 
+          <div 
               className={`absolute top-1/2 -translate-y-1/2 w-2.5 h-2.5 rounded-full shadow-md opacity-100 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 transition-opacity pointer-events-none ${
-                darkUI ? 'bg-white border border-white/20' : 'bg-white border border-black/10'
-              }`}
+               darkUI ? 'bg-white border border-white/20' : 'bg-white border border-black/10'
+             }`}
               style={{ left: `${duration ? (displayTime / duration) * 100 : 0}%` }}
             />
           )}

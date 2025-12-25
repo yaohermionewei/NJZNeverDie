@@ -320,7 +320,7 @@ const App: React.FC = () => {
       prevLyric: currentIndex > 0 ? lyrics[currentIndex - 1].text : ''
     };
   }, [lyrics, currentIndex]);
-
+  
   // Particle Params State
   const [particleParams, setParticleParams] = useState<ParticleParams>(() => {
     const saved = localStorage.getItem('particleParams');
@@ -448,17 +448,22 @@ const App: React.FC = () => {
   const audioRef = useRef<HTMLAudioElement>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const sourceRef = useRef<MediaElementAudioSourceNode | null>(null);
+  const pendingSeekRef = useRef<{
+    targetTime: number;
+    startedAtMs: number;
+    deadlineAtMs: number;
+  } | null>(null);
+  const lastUserSeekAtMsRef = useRef<number>(0);
+  const lastPlayAttemptAtMsRef = useRef<number>(0);
+  const recoveringRef = useRef<boolean>(false);
+  const cooldownUntilMsRef = useRef<number>(0);
 
-  // Initialize Audio Context
-  useEffect(() => {
-    const initAudioContext = () => {
+  const initAudioContext = React.useCallback(() => {
       if (!audioRef.current || sourceRef.current) return;
-
       try {
         const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
         const audioContext = new AudioContextClass();
         const analyserNode = audioContext.createAnalyser();
-        
         analyserNode.fftSize = 256;
         
         const source = audioContext.createMediaElementSource(audioRef.current);
@@ -471,40 +476,190 @@ const App: React.FC = () => {
       } catch (e) {
         console.error("Audio Context setup failed:", e);
       }
-    };
+  }, []);
 
-    // Audio context must be resumed/created after user interaction
-    const handleInteraction = () => {
-      if (audioContextRef.current?.state === 'suspended') {
-        audioContextRef.current.resume();
-      }
+  const ensureAudioContext = React.useCallback(async () => {
       if (!audioContextRef.current) {
          initAudioContext();
       }
-    };
-
-    window.addEventListener('click', handleInteraction, { once: true });
-    window.addEventListener('keydown', handleInteraction, { once: true });
-    
-    // Try init immediately if possible (some browsers allow)
-    if (isPlaying) initAudioContext();
-
-    return () => {
-       window.removeEventListener('click', handleInteraction);
-       window.removeEventListener('keydown', handleInteraction);
+    const ctx = audioContextRef.current;
+    if (ctx?.state === 'suspended') {
+      try {
+        await ctx.resume();
+      } catch {
+        // iOS may reject resume() without a user gesture; ignore.
+      }
     }
-  }, [isPlaying]);
+  }, [initAudioContext]);
+
+  // Initialize/Resume AudioContext on first real user interaction (mobile autoplay policies)
+  useEffect(() => {
+    const handleInteraction = () => {
+      void ensureAudioContext();
+    };
+    window.addEventListener('pointerdown', handleInteraction, { once: true });
+    window.addEventListener('keydown', handleInteraction, { once: true });
+    return () => {
+      window.removeEventListener('pointerdown', handleInteraction);
+       window.removeEventListener('keydown', handleInteraction);
+    };
+  }, [ensureAudioContext]);
 
   // Toggle Play/Pause
-  const togglePlay = () => {
-    if (!audioRef.current) return;
-    if (isPlaying) {
-      audioRef.current.pause();
+  const togglePlay = React.useCallback(async () => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    try {
+      if (audio.paused) {
+        lastPlayAttemptAtMsRef.current = performance.now();
+        await ensureAudioContext();
+        await audio.play();
     } else {
-        audioRef.current.play();
+        audio.pause();
+      }
+    } catch {
+      // Ignore: play() can reject on mobile due to gesture policy or transient pipeline issues.
     }
-    setIsPlaying(!isPlaying);
-  };
+  }, [ensureAudioContext]);
+
+  const waitForTimeNear = React.useCallback(async (targetTime: number, timeoutMs: number) => {
+    const audio = audioRef.current;
+    if (!audio) return false;
+    const start = performance.now();
+    const EPS = 0.25; // seconds
+    while (performance.now() - start < timeoutMs) {
+      const t = audio.currentTime;
+      if (Number.isFinite(t) && Math.abs(t - targetTime) <= EPS) return true;
+      await new Promise((r) => setTimeout(r, 50));
+    }
+    return false;
+  }, []);
+
+  const selfHeal = React.useCallback(async (reason: 'watchdog' | 'seek') => {
+    const audio = audioRef.current;
+    if (!audio) return false;
+    const now = performance.now();
+    if (recoveringRef.current) return false;
+    if (now < cooldownUntilMsRef.current) return false;
+    recoveringRef.current = true;
+    cooldownUntilMsRef.current = now + 5000;
+
+    const t0 = Number.isFinite(audio.currentTime) ? audio.currentTime : 0;
+
+    const trySoft = async () => {
+      try { await ensureAudioContext(); } catch {}
+      try { audio.pause(); } catch {}
+      try { audio.currentTime = Math.max(0, t0 - 0.05); } catch {}
+      try {
+        lastPlayAttemptAtMsRef.current = performance.now();
+        await audio.play();
+        // Give it a brief moment to move.
+        const ok = await waitForTimeNear(Math.max(0, t0 - 0.05), 400);
+        return ok;
+      } catch {
+        return false;
+      }
+    };
+
+    const waitCanPlay = async () => {
+      return await new Promise<boolean>((resolve) => {
+        let done = false;
+        const finish = (ok: boolean) => {
+          if (done) return;
+          done = true;
+          audio.removeEventListener('canplay', onCanPlay);
+          audio.removeEventListener('loadedmetadata', onCanPlay);
+          audio.removeEventListener('error', onErr);
+          resolve(ok);
+        };
+        const onCanPlay = () => finish(true);
+        const onErr = () => finish(false);
+        audio.addEventListener('canplay', onCanPlay, { once: true });
+        audio.addEventListener('loadedmetadata', onCanPlay, { once: true });
+        audio.addEventListener('error', onErr, { once: true });
+        setTimeout(() => finish(true), 1500);
+      });
+    };
+
+    const tryHard = async () => {
+      try { await ensureAudioContext(); } catch {}
+      try { audio.pause(); } catch {}
+      try {
+        const src = (audio as any).currentSrc || audio.src;
+        if (src) (audio as any).src = src;
+        audio.load();
+        await waitCanPlay();
+        const d = Number.isFinite(audio.duration) ? audio.duration : duration;
+        const t = Math.max(0, Math.min(t0, Number.isFinite(d) && d > 0 ? d - 0.01 : t0));
+        try { audio.currentTime = t; } catch {}
+        lastPlayAttemptAtMsRef.current = performance.now();
+        await audio.play();
+        const ok = await waitForTimeNear(t, 600);
+        return ok;
+      } catch {
+        return false;
+      }
+    };
+
+    let ok = false;
+    ok = await trySoft();
+    if (!ok) ok = await tryHard();
+
+    recoveringRef.current = false;
+    return ok;
+  }, [ensureAudioContext, waitForTimeNear, duration]);
+
+  const safeSeek = React.useCallback(async (time: number, opts?: { autoPlay?: boolean }) => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    const autoPlay = opts?.autoPlay ?? true;
+    const now = performance.now();
+    lastUserSeekAtMsRef.current = now;
+
+    const d = Number.isFinite(audio.duration) ? audio.duration : duration;
+    const t = Math.max(0, Math.min(time, Number.isFinite(d) && d > 0 ? d : time));
+
+    // Expose desired time immediately for UI; onTimeUpdate will respect seek grace.
+    pendingSeekRef.current = { targetTime: t, startedAtMs: now, deadlineAtMs: now + 1200 };
+    setCurrentTime(t);
+    lastTimeUpdateRef.current = t;
+
+    const attempt = async () => {
+      try { await ensureAudioContext(); } catch {}
+      try { audio.currentTime = t; } catch {}
+      if (autoPlay) {
+        try {
+          lastPlayAttemptAtMsRef.current = performance.now();
+          await audio.play();
+        } catch {
+          // ignore
+        }
+      }
+      const ok = await waitForTimeNear(t, 900);
+      return ok;
+    };
+
+    let ok = await attempt();
+    if (!ok) {
+      // heal and retry once
+      await selfHeal('seek');
+      ok = await attempt();
+    }
+
+    if (ok) {
+      pendingSeekRef.current = null;
+      // Keep throttle refs consistent with a successful user seek.
+      lastTimeUpdateRef.current = t;
+    } else {
+      // Give up: fall back to real audio time to avoid a permanently fake UI.
+      pendingSeekRef.current = null;
+      const real = audio.currentTime;
+      if (Number.isFinite(real)) {
+        lastTimeUpdateRef.current = real;
+        setCurrentTime(real);
+      }
+    }
+  }, [duration, ensureAudioContext, selfHeal, waitForTimeNear]);
 
   // Handle Volume
   const handleVolumeChange = (newVolume: number) => {
@@ -519,6 +674,21 @@ const App: React.FC = () => {
   const onTimeUpdate = () => {
     if (!audioRef.current) return;
     const newTime = audioRef.current.currentTime;
+
+    // Seek grace: after a user seek, avoid having timeupdate immediately snap UI back to 0
+    // if the underlying media pipeline failed to apply the seek yet. If it doesn't settle
+    // within the deadline, safeSeek will clear pending and UI will fall back to real time.
+    const pending = pendingSeekRef.current;
+    if (pending) {
+      const now = performance.now();
+      if (now <= pending.deadlineAtMs) {
+        if (Number.isFinite(newTime) && Math.abs(newTime - pending.targetTime) > 2.0) {
+          return;
+        }
+      } else {
+        pendingSeekRef.current = null;
+      }
+    }
     
     // Calculate which lyric line should be active
     const newLyricIndex = lyrics.findIndex((l, i) => {
@@ -549,17 +719,7 @@ const App: React.FC = () => {
 
   // Seek - 如果是暂停状态，跳转后自动播放
   const handleSeek = (time: number) => {
-    if (audioRef.current) {
-      audioRef.current.currentTime = time;
-      setCurrentTime(time);
-      // Keep throttle refs consistent with user-initiated seeks to prevent "snap back".
-      lastTimeUpdateRef.current = time;
-      // 如果当前是暂停状态，自动开始播放
-      if (!isPlaying) {
-        audioRef.current.play();
-        setIsPlaying(true);
-      }
-    }
+    void safeSeek(time, { autoPlay: true });
   };
 
   // Handle song end - auto play next song
@@ -594,6 +754,77 @@ const App: React.FC = () => {
          audioRef.current.play().catch(e => console.log("Autoplay prevented", e));
      }
   }, [currentSong])
+
+  // Watchdog: detect "playing but audio.currentTime not advancing" and self-heal.
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    let lastAudioTime = Number.isFinite(audio.currentTime) ? audio.currentTime : 0;
+    let lastWall = performance.now();
+    let stalledMs = 0;
+
+    const tick = () => {
+      const now = performance.now();
+      const dtWall = now - lastWall;
+      lastWall = now;
+
+      // Don't heal in background or during explicit seeking.
+      if (document.hidden || audio.seeking) {
+        stalledMs = 0;
+        lastAudioTime = Number.isFinite(audio.currentTime) ? audio.currentTime : 0;
+        return;
+      }
+
+      // Grace after user seek / play attempt to avoid false positives.
+      const seekGrace = now - lastUserSeekAtMsRef.current < 1500;
+      const playGrace = now - lastPlayAttemptAtMsRef.current < 1500;
+      const pending = pendingSeekRef.current;
+      const pendingGrace = pending ? now <= pending.deadlineAtMs : false;
+      if (seekGrace || playGrace || pendingGrace) {
+        stalledMs = 0;
+        lastAudioTime = Number.isFinite(audio.currentTime) ? audio.currentTime : 0;
+        return;
+      }
+
+      if (audio.paused) {
+        stalledMs = 0;
+        lastAudioTime = Number.isFinite(audio.currentTime) ? audio.currentTime : 0;
+        return;
+      }
+
+      const t = Number.isFinite(audio.currentTime) ? audio.currentTime : 0;
+      const advanced = t > lastAudioTime + 0.02;
+      if (advanced) {
+        stalledMs = 0;
+        lastAudioTime = t;
+        return;
+      }
+
+      stalledMs += dtWall;
+      if (stalledMs >= 1500) {
+        stalledMs = 0;
+        void selfHeal('watchdog');
+      }
+    };
+
+    const id = window.setInterval(tick, 250);
+
+    // If the media pipeline reports waiting/stalled/error while not paused, try healing.
+    const onWaiting = () => { if (!audio.paused) void selfHeal('watchdog'); };
+    const onStalled = () => { if (!audio.paused) void selfHeal('watchdog'); };
+    const onError = () => { if (!audio.paused) void selfHeal('watchdog'); };
+    audio.addEventListener('waiting', onWaiting);
+    audio.addEventListener('stalled', onStalled);
+    audio.addEventListener('error', onError);
+
+    return () => {
+      window.clearInterval(id);
+      audio.removeEventListener('waiting', onWaiting);
+      audio.removeEventListener('stalled', onStalled);
+      audio.removeEventListener('error', onError);
+    };
+  }, [currentSongId, selfHeal]);
 
   // Mouse idle detection - hide UI after 4 seconds of no mouse movement
   useEffect(() => {
@@ -848,7 +1079,7 @@ const App: React.FC = () => {
                 vinylSpeed={vinylParams.vinylSpeed}
                 rabbitSpeed={vinylParams.rabbitSpeed}
               />
-            </div>
+                </div>
           </div>
           
           {/* ========== 前景内容层 - 标题/歌词 ========== */}
@@ -864,16 +1095,16 @@ const App: React.FC = () => {
                       <h1 className="text-[18px] lg:text-3xl font-bold text-gray-900 tracking-tight leading-tight">{currentSong.title}</h1>
                   </div>
                   <div className="flex items-center justify-center lg:justify-start gap-2 text-gray-600 text-sm lg:text-lg mb-5 font-normal">
-                      <span>{currentSong.artist}</span>
-                  </div>
-               </div>
-    
+                    <span>{currentSong.artist}</span>
+                </div>
+             </div>
+  
                {/* 大屏时的歌词 - 占满剩余空间 */}
                <div className="hidden lg:block lg:flex-1 min-h-0 relative lg:mb-8 overflow-hidden w-full">
                <LyricsView lyrics={lyrics} currentTime={currentTime} onLyricClick={handleSeek} themeColor={currentSong.themeColor} />
-               </div>
-            </div>
-            
+             </div>
+          </div>
+  
             {/* 右侧：大屏时的占位（Vinyl 已经用绝对定位放到背景层了） */}
             <div className="hidden lg:block lg:w-7/12" />
 
@@ -883,7 +1114,7 @@ const App: React.FC = () => {
               onChange={setVinylParams}
               isUIHidden={isUIHidden}
             />
-        </div>
+             </div>
 
           {/* ========== 小屏时的歌词 - 绝对定位固定在底部空白区域 ========== */}
           {/* 通过计算 vinyl bottom y 值精确定位（永不遮挡 vinyl）。 */}
@@ -903,8 +1134,8 @@ const App: React.FC = () => {
                 maxLines={isUIHidden ? 4 : 1}
                 themeColor={currentSong.themeColor}
               />
-      </div>
-
+          </div>
+  
         </div>
       )}
 
@@ -1003,6 +1234,7 @@ const App: React.FC = () => {
               currentTime={currentTime} 
               onLyricClick={handleSeek}
               themeColor={currentSong.themeColor}
+              variant="fullscreen"
             />
           </div>
         </div>

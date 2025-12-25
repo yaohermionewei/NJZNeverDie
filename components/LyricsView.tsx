@@ -9,9 +9,10 @@ interface LyricsViewProps {
   compact?: boolean; // 紧凑模式：行间距更小（用于小屏4行模式）
   maxLines?: number; // 最多显示几行（小屏用，0或undefined表示显示全部）
   themeColor?: string; // 主题色，用于高亮歌词
+  variant?: 'default' | 'fullscreen'; // default: 桌面/常规；fullscreen: 移动端全屏歌词页
 }
 
-const LyricsView: React.FC<LyricsViewProps> = ({ lyrics, currentTime, onLyricClick, compact = false, maxLines, themeColor = '#ff4d6a' }) => {
+const LyricsView: React.FC<LyricsViewProps> = ({ lyrics, currentTime, onLyricClick, compact = false, maxLines, themeColor = '#ff4d6a', variant = 'default' }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [isUserScrolling, setIsUserScrolling] = useState(false);
   const userScrollTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -115,23 +116,26 @@ const LyricsView: React.FC<LyricsViewProps> = ({ lyrics, currentTime, onLyricCli
   if (maxLines && maxLines > 0) {
     return (
       <div className="h-full w-full flex flex-col items-center justify-center relative overflow-hidden">
-        {displayLyrics.map((line) => {
-          const isActive = line.originalIndex === activeIndex;
-          return (
-            <div
-              key={line.originalIndex}
-              onClick={() => onLyricClick?.(line.time)}
-              className={`transition-all duration-500 ease-out ${compact ? 'mb-2' : 'mb-4'} text-2xl font-bold tracking-tight cursor-pointer text-center transform
-                ${isActive 
-                  ? 'scale-100 opacity-100' 
-                  : 'text-gray-400/50 scale-95 opacity-50'
-                }`}
-              style={isActive ? { color: themeColor } : undefined}
-            >
-              {line.text}
-            </div>
-          );
-        })}
+        {/* 恢复原先的折行策略：不固定每行高度/行高，让长句自然换行 */}
+        <div className={`w-full ${compact ? 'max-w-[66%]' : ''} mx-auto`}>
+          {displayLyrics.map((line) => {
+            const isActive = line.originalIndex === activeIndex;
+            return (
+              <div
+                key={line.originalIndex}
+                onClick={() => onLyricClick?.(line.time)}
+                className={`transition-all duration-500 ease-out ${compact ? 'mb-1.5' : 'mb-4'} font-bold tracking-tight cursor-pointer text-center transform break-words whitespace-normal
+                  ${isActive 
+                    ? 'text-2xl scale-100 opacity-100' 
+                    : 'text-[22px] scale-100 opacity-50 text-gray-400/50'
+                  }`}
+                style={isActive ? { color: themeColor } : undefined}
+              >
+                {line.text}
+              </div>
+            );
+          })}
+        </div>
       </div>
     );
   }
@@ -157,11 +161,19 @@ const LyricsView: React.FC<LyricsViewProps> = ({ lyrics, currentTime, onLyricCli
             <div
               key={line.originalIndex}
               onClick={() => onLyricClick?.(line.time)}
-              className={`transition-all duration-700 ease-out mb-10 text-xl sm:text-2xl lg:text-4xl font-bold tracking-tight cursor-pointer text-center lg:text-left origin-center lg:origin-left transform
-                ${isActive 
-                  ? 'scale-100 opacity-100 blur-none translate-x-0' 
-                  : 'text-gray-400/60 scale-95 opacity-40 blur-[0.5px] hover:opacity-60 hover:text-gray-500'
-                }`}
+              className={
+                variant === 'fullscreen'
+                  ? `transition-all duration-700 ease-out mb-10 tracking-tight cursor-pointer text-center lg:text-left origin-center lg:origin-left transform
+                      ${isActive 
+                        ? 'text-3xl sm:text-4xl lg:text-5xl font-bold scale-100 opacity-100 translate-x-0' 
+                        : 'text-xl sm:text-2xl lg:text-3xl font-normal text-gray-700/80 scale-95 opacity-80 hover:opacity-100'
+                      }`
+                  : `transition-all duration-700 ease-out mb-10 text-xl sm:text-2xl lg:text-4xl font-bold tracking-tight cursor-pointer text-center lg:text-left origin-center lg:origin-left transform
+                      ${isActive 
+                        ? 'scale-100 opacity-100 blur-none translate-x-0' 
+                        : 'text-gray-400/60 scale-95 opacity-40 blur-[0.5px] hover:opacity-60 hover:text-gray-500'
+                      }`
+              }
               style={isActive ? { color: themeColor } : undefined}
             >
               {line.text}

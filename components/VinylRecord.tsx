@@ -28,36 +28,62 @@ const VinylRecord: React.FC<VinylRecordProps> = ({ coverUrl, isPlaying, vinylSpe
   const [imgError, setImgError] = useState(false);
   const [skateFrame, setSkateFrame] = useState(0);
   const dirRef = useRef<1 | -1>(1);
+  const rafRef = useRef<number | null>(null);
+  const lastTickRef = useRef<number>(0);
+
+  // Preload rabbit frames to improve desktop reliability and avoid first-frame stalls.
+  useEffect(() => {
+    for (const src of RABBIT_FRAMES) {
+      const img = new Image();
+      img.src = src;
+    }
+  }, []);
 
   // Rabbit skating sprite animation: 1234565432... @ 12fps
-  // Pauses/resumes with isPlaying.
+  // Use requestAnimationFrame (more reliable on desktop compositing) and pause/resume with isPlaying.
   useEffect(() => {
     if (!isPlaying) return;
     if (RABBIT_FRAMES.length <= 1) return;
 
-    const intervalId = window.setInterval(() => {
-      setSkateFrame((prev) => {
-        const max = RABBIT_FRAMES.length - 1;
-        if (max <= 0) return 0;
+    const FPS = 12;
+    const frameInterval = 1000 / FPS;
+    lastTickRef.current = performance.now();
 
-        const dir = dirRef.current;
-        let next = prev + dir;
+    const loop = (now: number) => {
+      if (now - lastTickRef.current >= frameInterval) {
+        lastTickRef.current = now;
+        setSkateFrame((prev) => {
+          const max = RABBIT_FRAMES.length - 1;
+          if (max <= 0) return 0;
 
-        // Bounce at ends without repeating endpoints:
-        // 0,1,2,3,4,5,4,3,2,1,0,1...
-        if (next > max) {
-          dirRef.current = -1;
-          next = max - 1;
-        } else if (next < 0) {
-          dirRef.current = 1;
-          next = 1;
-        }
+          const dir = dirRef.current;
+          let next = prev + dir;
 
-        return Math.max(0, Math.min(max, next));
-      });
-    }, 1000 / 12);
+          // Bounce at ends without repeating endpoints:
+          // 0,1,2,3,4,5,4,3,2,1,0,1...
+          if (next > max) {
+            dirRef.current = -1;
+            next = max - 1;
+          } else if (next < 0) {
+            dirRef.current = 1;
+            next = 1;
+          }
 
-    return () => window.clearInterval(intervalId);
+          return Math.max(0, Math.min(max, next));
+        });
+      }
+
+      rafRef.current = requestAnimationFrame(loop);
+    };
+
+    rafRef.current = requestAnimationFrame(loop);
+
+    return () => {
+      if (rafRef.current !== null) {
+        cancelAnimationFrame(rafRef.current);
+      }
+      rafRef.current = null;
+    };
   }, [isPlaying]);
 
   return (
@@ -76,12 +102,13 @@ const VinylRecord: React.FC<VinylRecordProps> = ({ coverUrl, isPlaying, vinylSpe
           }}
         >
           <img 
+            key={skateFrame}
             src={RABBIT_FRAMES[skateFrame]} 
             alt="Skating Rabbit" 
             className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-[85%] w-16 h-16 md:w-20 md:h-20 lg:w-[12%] lg:h-[12%] object-contain scale-x-[-1]"
           />
         </div>
-
+        
         {/* Outer Glow/Shadow - Slightly richer pink with shorter distance */}
         {/* <div className="absolute inset-0 rounded-full bg-[#ff4d6a]/60 blur-[60px] transform scale-95"></div> */}
         

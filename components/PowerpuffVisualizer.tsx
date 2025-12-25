@@ -1258,7 +1258,7 @@ const PowerpuffVisualizer: React.FC<PowerpuffVisualizerProps> = ({ analyser, isP
         // Advance frame for all animated characters
         CHARACTERS.forEach((char, index) => {
           if (char.isAnimated && char.frames.length > 1) {
-            frameIndicesRef.current[index] =
+            frameIndicesRef.current[index] = 
               (frameIndicesRef.current[index] + 1) % char.frames.length;
           }
         });
