@@ -117,7 +117,8 @@ const LyricsView: React.FC<LyricsViewProps> = ({ lyrics, currentTime, onLyricCli
     return (
       <div className="h-full w-full flex flex-col items-center justify-center relative overflow-hidden">
         {/* 恢复原先的折行策略：不固定每行高度/行高，让长句自然换行 */}
-        <div className={`w-full ${compact ? 'max-w-[66%]' : ''} mx-auto`}>
+        {/* 去掉过窄的 max-width，避免左右留白过大导致过度折行；宽度由外层容器(px-6)决定，视觉上更贴近唱片宽度 */}
+        <div className="w-full mx-auto max-w-full">
           {displayLyrics.map((line) => {
             const isActive = line.originalIndex === activeIndex;
             return (
@@ -163,10 +164,12 @@ const LyricsView: React.FC<LyricsViewProps> = ({ lyrics, currentTime, onLyricCli
               onClick={() => onLyricClick?.(line.time)}
               className={
                 variant === 'fullscreen'
-                  ? `transition-all duration-700 ease-out mb-10 tracking-tight cursor-pointer text-center lg:text-left origin-center lg:origin-left transform
-                      ${isActive 
-                        ? 'text-3xl sm:text-4xl lg:text-5xl font-bold scale-100 opacity-100 translate-x-0' 
-                        : 'text-xl sm:text-2xl lg:text-3xl font-normal text-gray-700/80 scale-95 opacity-80 hover:opacity-100'
+                  ? `transition-all duration-700 ease-out mb-10 tracking-tight cursor-pointer text-center lg:text-left origin-center lg:origin-left transform break-words whitespace-normal
+                      ${
+                        // 高亮26px/semibold，非高亮24px/regular，差距小以降低换行跳变概率
+                        isActive
+                          ? 'text-[26px] font-semibold scale-100 opacity-100 translate-x-0'
+                          : 'text-2xl font-normal text-gray-700/70 scale-100 opacity-80 hover:opacity-100'
                       }`
                   : `transition-all duration-700 ease-out mb-10 text-xl sm:text-2xl lg:text-4xl font-bold tracking-tight cursor-pointer text-center lg:text-left origin-center lg:origin-left transform
                       ${isActive 
