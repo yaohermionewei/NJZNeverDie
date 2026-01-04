@@ -103,7 +103,8 @@ const HiddenLyricScroller: React.FC<{
     return p;
   }, [units]);
 
-  const baseTextClass = `text-[16px] font-normal leading-[${HIDDEN_LYRIC_LINE_HEIGHT_PX}px] transition-all duration-700 ease-[cubic-bezier(0.2,0.8,0.2,1)]`;
+  // NOTE: Keep line-height in inline styles (per-line) so Tailwind build doesn't need to generate dynamic leading-[...]
+  const baseTextClass = 'text-[16px] font-normal transition-all duration-700 ease-[cubic-bezier(0.2,0.8,0.2,1)]';
   const alignClass = align === 'left' ? 'text-left' : 'text-center';
   const paddingClass = paddingClassName ?? '';
 
