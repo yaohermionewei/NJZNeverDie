@@ -386,10 +386,18 @@ const CubesVisualizer: React.FC<CubesVisualizerProps> = ({
       // Right-facing rabbits: 1.2, Left-facing rabbits: 1.4 (to match different asset sizes)
       const spriteSize = isLeftFacing ? 1.4 : 1.2;
       sprite.scale.set(spriteSize, spriteSize, 1);
-      scene.add(sprite);
       
       // 获取初始方块位置
       const initCube = cubes[cubeIndex];
+      
+      // 设置 sprite 初始位置（修复：之前没有设置，导致兔子都在原点）
+      sprite.position.set(
+        initCube.position.x,
+        initCube.scale.y + RABBIT_Y_OFFSET,
+        initCube.position.z
+      );
+      
+      scene.add(sprite);
       
       rabbits.push({
         sprite,
@@ -610,13 +618,15 @@ const CubesVisualizer: React.FC<CubesVisualizerProps> = ({
           const cubeDeltaY = newScale - oldScaleY;
           const cubeTopVelPerSec = dtSec > 0 ? (cubeDeltaY / dtSec) : 0;
           
-          // When NOT playing: freeze rabbit completely on cube top
-          if (!isPlaying) {
-            rabbit.isJumping = false;
-            rabbit.velocityY = 0;
-            rabbit.sprite.position.y = targetTopY;
-            rabbit.sprite.material.map = rabbit.textures.idle;
-          } else {
+                  // When NOT playing: freeze rabbit completely on cube top
+                  if (!isPlaying) {
+                    rabbit.isJumping = false;
+                    rabbit.velocityY = 0;
+                    rabbit.sprite.position.x = cube.position.x;
+                    rabbit.sprite.position.y = targetTopY;
+                    rabbit.sprite.position.z = cube.position.z;
+                    rabbit.sprite.material.map = rabbit.textures.idle;
+                  } else {
             // Only trigger jump when cube rises significantly
             if (cubeTopVelPerSec > RABBIT_JUMP_TRIGGER_VY_PER_SEC && !rabbit.isJumping) {
               // Initial impulse = cube's upward velocity + a constant "pop"
