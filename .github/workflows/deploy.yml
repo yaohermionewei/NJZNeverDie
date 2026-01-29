@@ -30,6 +30,6 @@ jobs:
 
       - name: Deploy dist via rsync
         run: |
-          rsync -az \
+          rsync -az --no-times --omit-dir-times \
             -e "ssh -p ${{ secrets.SERVER_PORT }} -o StrictHostKeyChecking=no" \
             dist/ ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:${{ secrets.SERVER_PATH }}/
