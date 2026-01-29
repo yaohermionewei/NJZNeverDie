@@ -749,13 +749,6 @@ const App: React.FC = () => {
     };
   }, [currentSong]);
 
-  // Auto-play when song changes
-  useEffect(() => {
-     if(currentSong.audioSrc && audioRef.current) {
-         audioRef.current.play().catch(e => console.log("Autoplay prevented", e));
-     }
-  }, [currentSong])
-
   // Watchdog: detect "playing but audio.currentTime not advancing" and self-heal.
   useEffect(() => {
     const audio = audioRef.current;
