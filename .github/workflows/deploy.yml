@@ -34,3 +34,11 @@ jobs:
             --exclude '.well-known/' --exclude '.user.ini' --exclude '.htaccess' \
             -e "ssh -p ${{ secrets.SERVER_PORT }} -o StrictHostKeyChecking=no" \
             dist/ ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:${{ secrets.SERVER_PATH }}/
+
+      - name: Warm up cache
+        run: |
+          echo "Waiting for files to settle..."
+          sleep 5
+          echo "Warming up cache..."
+          curl -s -o /dev/null -w "Homepage: %{http_code} (%{time_total}s)\n" https://njzneverdie.wystudio.zone/
+          echo "Cache warmed up!"
