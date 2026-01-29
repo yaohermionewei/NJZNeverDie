@@ -2,7 +2,7 @@ name: Deploy to Tencent Cloud
 
 on:
   push:
-    branches: [ "main" ]
+    branches: ["main"]
 
 jobs:
   deploy:
@@ -31,6 +31,6 @@ jobs:
       - name: Deploy dist via rsync
         run: |
           rsync -az --no-times --omit-dir-times --no-perms --no-owner --no-group \
-  --exclude '.well-known/' --exclude '.user.ini' --exclude '.htaccess' \
-  -e "ssh -p ${{ secrets.SERVER_PORT }} -o StrictHostKeyChecking=no" \
-  dist/ ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:${{ secrets.SERVER_PATH }}/
+            --exclude '.well-known/' --exclude '.user.ini' --exclude '.htaccess' \
+            -e "ssh -p ${{ secrets.SERVER_PORT }} -o StrictHostKeyChecking=no" \
+            dist/ ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:${{ secrets.SERVER_PATH }}/
