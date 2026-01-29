@@ -90,6 +90,10 @@ const RABBIT_AIR_DAMP_LOG_PER_SEC = Math.log(RABBIT_AIR_DAMP_PER_FRAME) * RABBIT
 const BASELINE_FPS = 60;
 const MAX_DT = 1 / 30; // clamp to avoid huge jumps on background/tab-switch or frame spikes
 
+// Rabbit horizontal hop settings
+const HOP_VELOCITY_THRESHOLD = 15.0;  // 动势超过此值才跳到其他方块
+const MAX_HOP_GRID_DISTANCE = 2;      // 最大跳跃格子数（曼哈顿距离）
+
 // Vertex Shader: Pass world Y position AND world normal to fragment shader
 const vertexShader = `
   varying float vWorldY;
@@ -180,8 +184,12 @@ const CubesVisualizer: React.FC<CubesVisualizerProps> = ({
   const rabbitsRef = useRef<{
     sprite: THREE.Sprite;
     cubeIndex: number;
+    targetCubeIndex: number;  // 跳跃目标方块（预订机制）
     velocityY: number;
     isJumping: boolean;
+    startX: number;           // 跳跃起始X位置
+    startZ: number;           // 跳跃起始Z位置
+    hopProgress: number;      // 水平移动进度 0-1
     textures: {
       idle: THREE.Texture;
       up: THREE.Texture;
@@ -195,6 +203,54 @@ const CubesVisualizer: React.FC<CubesVisualizerProps> = ({
   const uiBottomInsetPxRef = useRef<number>(0);
   const lookAtShiftRef = useRef<number>(0);
   
+  // ===== RABBIT HOP HELPER FUNCTIONS =====
+  // 获取所有被占用的方块（包括已预订的目标）- 防止冲突
+  const getOccupiedCubes = (
+    rabbits: typeof rabbitsRef.current,
+    excludeRabbit: typeof rabbitsRef.current[0]
+  ): Set<number> => {
+    const occupied = new Set<number>();
+    
+    for (const r of rabbits) {
+      if (r === excludeRabbit) continue;
+      
+      // 当前所在方块
+      occupied.add(r.cubeIndex);
+      
+      // 如果正在跳跃，目标方块也算占用（预订机制）
+      if (r.isJumping && r.targetCubeIndex !== r.cubeIndex) {
+        occupied.add(r.targetCubeIndex);
+      }
+    }
+    
+    return occupied;
+  };
+
+  // 获取附近可跳跃的方块索引列表
+  const getNearbyCubes = (currentIndex: number, maxDistance: number, excludeIndices: Set<number>): number[] => {
+    const currentRow = Math.floor(currentIndex / GRID_SIZE);
+    const currentCol = currentIndex % GRID_SIZE;
+    const candidates: number[] = [];
+    
+    for (let dr = -maxDistance; dr <= maxDistance; dr++) {
+      for (let dc = -maxDistance; dc <= maxDistance; dc++) {
+        if (dr === 0 && dc === 0) continue; // 排除自己
+        if (Math.abs(dr) + Math.abs(dc) > maxDistance) continue; // 曼哈顿距离限制
+        
+        const newRow = currentRow + dr;
+        const newCol = currentCol + dc;
+        
+        if (newRow >= 0 && newRow < GRID_SIZE && newCol >= 0 && newCol < GRID_SIZE) {
+          const newIndex = newRow * GRID_SIZE + newCol;
+          if (!excludeIndices.has(newIndex)) {
+            candidates.push(newIndex);
+          }
+        }
+      }
+    }
+    return candidates;
+  };
+
   // Initialize Three.js scene (runs once, never rebuilds)
   useEffect(() => {
     if (!containerRef.current) return;
@@ -332,11 +388,18 @@ const CubesVisualizer: React.FC<CubesVisualizerProps> = ({
       sprite.scale.set(spriteSize, spriteSize, 1);
       scene.add(sprite);
       
+      // 获取初始方块位置
+      const initCube = cubes[cubeIndex];
+      
       rabbits.push({
         sprite,
         cubeIndex,
+        targetCubeIndex: cubeIndex,  // 初始等于当前
         velocityY: 0,
         isJumping: false,
+        startX: initCube.position.x,
+        startZ: initCube.position.z,
+        hopProgress: 1,  // 1表示已到达目标
         textures: {
           idle: idleTexture,
           up: upTexture,
@@ -559,6 +622,22 @@ const CubesVisualizer: React.FC<CubesVisualizerProps> = ({
               // Initial impulse = cube's upward velocity + a constant "pop"
               rabbit.velocityY = cubeTopVelPerSec + RABBIT_POP_VY_PER_SEC;
               rabbit.isJumping = true;
+              rabbit.targetCubeIndex = rabbit.cubeIndex; // 默认原地跳
+              
+              // 只有动势足够大才跳到其他方块
+              if (rabbit.velocityY > HOP_VELOCITY_THRESHOLD) {
+                // 获取所有被占用的方块（当前位置 + 已预订的目标）
+                const occupiedIndices = getOccupiedCubes(rabbitsRef.current, rabbit);
+                
+                const nearbyCubes = getNearbyCubes(rabbit.cubeIndex, MAX_HOP_GRID_DISTANCE, occupiedIndices);
+                if (nearbyCubes.length > 0) {
+                  rabbit.startX = rabbit.sprite.position.x;
+                  rabbit.startZ = rabbit.sprite.position.z;
+                  rabbit.targetCubeIndex = nearbyCubes[Math.floor(Math.random() * nearbyCubes.length)];
+                  rabbit.hopProgress = 0;
+                }
+                // 如果附近都被占了，保持原地跳
+              }
             }
             
             if (rabbit.isJumping) {
@@ -566,8 +645,20 @@ const CubesVisualizer: React.FC<CubesVisualizerProps> = ({
               rabbit.velocityY *= Math.exp(RABBIT_AIR_DAMP_LOG_PER_SEC * dtSec);
               // Gravity (units/sec^2)
               rabbit.velocityY -= RABBIT_GRAVITY_PER_SEC2 * dtSec;
-              // Integrate position
+              // Integrate vertical position
               rabbit.sprite.position.y += rabbit.velocityY * dtSec;
+              
+              // 水平移动插值（跳到其他方块时）
+              if (rabbit.hopProgress < 1 && rabbit.targetCubeIndex !== rabbit.cubeIndex) {
+                rabbit.hopProgress = Math.min(1, rabbit.hopProgress + dtSec * 2.5);
+                const t = rabbit.hopProgress;
+                // easeInOutQuad 缓动函数
+                const easeT = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+                
+                const targetCube = cubes[rabbit.targetCubeIndex];
+                rabbit.sprite.position.x = THREE.MathUtils.lerp(rabbit.startX, targetCube.position.x, easeT);
+                rabbit.sprite.position.z = THREE.MathUtils.lerp(rabbit.startZ, targetCube.position.z, easeT);
+              }
               
               // Switch texture based on vertical direction
               if (rabbit.velocityY > 0) {
@@ -576,17 +667,36 @@ const CubesVisualizer: React.FC<CubesVisualizerProps> = ({
                 rabbit.sprite.material.map = rabbit.textures.down;
               }
               
-              // Collision with cube top - ONLY detect when falling down
-              if (rabbit.velocityY < 0 && rabbit.sprite.position.y <= targetTopY) {
-                rabbit.sprite.position.y = targetTopY;
+              // 落地检测 - 使用目标方块高度
+              const targetCube = cubes[rabbit.targetCubeIndex];
+              const landingTopY = targetCube.scale.y + RABBIT_Y_OFFSET;
+              
+              if (rabbit.velocityY < 0 && rabbit.sprite.position.y <= landingTopY) {
+                // 兜底冲突检测：检查目标方块是否被别人抢了
+                const isTargetOccupied = rabbitsRef.current.some(
+                  r => r !== rabbit && 
+                       !r.isJumping && 
+                       r.cubeIndex === rabbit.targetCubeIndex
+                );
                 
-                // If hitting hard enough, tiny bounce, otherwise stay
-                if (Math.abs(rabbit.velocityY) > RABBIT_BOUNCE_STOP_VY_PER_SEC) {
-                  rabbit.velocityY = -rabbit.velocityY * RABBIT_BOUNCE_DAMPING;
+                if (isTargetOccupied) {
+                  // 被抢了，弹回原位
+                  rabbit.targetCubeIndex = rabbit.cubeIndex;
+                  rabbit.velocityY = 3.0; // 小幅弹起重新找位置
                 } else {
-                  rabbit.velocityY = 0;
-                  rabbit.isJumping = false;
-                  rabbit.sprite.material.map = rabbit.textures.idle;
+                  // 正常落地：更新当前方块为目标方块
+                  rabbit.cubeIndex = rabbit.targetCubeIndex;
+                  rabbit.sprite.position.y = landingTopY;
+                  rabbit.hopProgress = 1;
+                  
+                  // 弹跳逻辑
+                  if (Math.abs(rabbit.velocityY) > RABBIT_BOUNCE_STOP_VY_PER_SEC) {
+                    rabbit.velocityY = -rabbit.velocityY * RABBIT_BOUNCE_DAMPING;
+                  } else {
+                    rabbit.velocityY = 0;
+                    rabbit.isJumping = false;
+                    rabbit.sprite.material.map = rabbit.textures.idle;
+                  }
                 }
               }
             } else {
@@ -594,20 +704,22 @@ const CubesVisualizer: React.FC<CubesVisualizerProps> = ({
               rabbit.velocityY = 0;
               rabbit.sprite.position.y = targetTopY;
               rabbit.sprite.material.map = rabbit.textures.idle;
+              
+              // 静止时XZ跟随当前方块
+              rabbit.sprite.position.x = cube.position.x;
+              rabbit.sprite.position.z = cube.position.z;
             }
 
-            // Safety cap: if rabbit flies too high, reset to top
+            // Safety cap: if rabbit flies too high, reset to current cube top
             if (rabbit.sprite.position.y > targetTopY + MAX_RABBIT_HEIGHT) {
               rabbit.sprite.position.y = targetTopY;
               rabbit.velocityY = 0;
               rabbit.isJumping = false;
+              rabbit.targetCubeIndex = rabbit.cubeIndex;
+              rabbit.hopProgress = 1;
               rabbit.sprite.material.map = rabbit.textures.idle;
             }
           }
-          
-          // Position XZ matches cube
-          rabbit.sprite.position.x = cube.position.x;
-          rabbit.sprite.position.z = cube.position.z;
         }
       }
 

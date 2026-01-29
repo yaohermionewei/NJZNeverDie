@@ -4,40 +4,6 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>NJZ Music Player</title>
-    <!-- Mobile debug console (Eruda): enabled only when URL contains ?debug=1 or ?eruda=1 -->
-    <script>
-      (function () {
-        try {
-          var params = new URLSearchParams(window.location.search);
-          var enabled = params.has('debug') || params.has('eruda');
-          if (!enabled) return;
-
-          var loadScript = function (src) {
-            return new Promise(function (resolve, reject) {
-              var s = document.createElement('script');
-              s.src = src;
-              s.async = true;
-              s.onload = function () { resolve(); };
-              s.onerror = function () { reject(new Error('Failed to load ' + src)); };
-              document.head.appendChild(s);
-            });
-          };
-
-          // Use a stable CDN for quick debugging; not loaded by default.
-          loadScript('https://cdn.jsdelivr.net/npm/eruda')
-            .then(function () {
-              if (window.eruda && typeof window.eruda.init === 'function') {
-                window.eruda.init();
-              }
-            })
-            .catch(function () {
-              // If the CDN is blocked, just skip silently.
-            });
-        } catch (e) {
-          // ignore
-        }
-      })();
-    </script>
     <style>
       @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
       
