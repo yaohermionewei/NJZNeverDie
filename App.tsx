@@ -465,6 +465,7 @@ const App: React.FC = () => {
   const forceAutoPlayRef = useRef<boolean>(false);
   const recoveringRef = useRef<boolean>(false);
   const cooldownUntilMsRef = useRef<number>(0);
+  const lastBackgroundTimeRef = useRef<number | null>(null);
 
   const initAudioContext = React.useCallback(() => {
       if (!audioRef.current || sourceRef.current) return;
@@ -499,6 +500,63 @@ const App: React.FC = () => {
       }
     }
   }, [initAudioContext]);
+
+  // Background handling: force pause and freeze time to avoid mobile pipeline drift.
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    const pauseAndFreeze = () => {
+      const t = Number.isFinite(audio.currentTime) ? audio.currentTime : 0;
+      lastBackgroundTimeRef.current = t;
+      pendingSeekRef.current = null;
+      shouldAutoPlayRef.current = false;
+      forceAutoPlayRef.current = false;
+      try {
+        audio.pause();
+      } catch {
+        // ignore
+      }
+      setIsPlaying(false);
+      const ctx = audioContextRef.current;
+      if (ctx) {
+        ctx.suspend().catch(() => {});
+      }
+    };
+
+    const restoreTime = () => {
+      const t = lastBackgroundTimeRef.current;
+      if (t == null || !Number.isFinite(t)) return;
+      try {
+        audio.currentTime = t;
+      } catch {
+        // ignore
+      }
+      setCurrentTime(t);
+      lastTimeUpdateRef.current = t;
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        pauseAndFreeze();
+      } else {
+        restoreTime();
+      }
+    };
+
+    const handlePageHide = () => pauseAndFreeze();
+    const handlePageShow = () => restoreTime();
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('pagehide', handlePageHide);
+    window.addEventListener('pageshow', handlePageShow);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('pagehide', handlePageHide);
+      window.removeEventListener('pageshow', handlePageShow);
+    };
+  }, []);
 
   // Initialize/Resume AudioContext on first real user interaction (mobile autoplay policies)
   useEffect(() => {
