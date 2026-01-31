@@ -30,6 +30,7 @@ interface ControlsProps {
   currentTime: number;
   duration: number;
   onSeek: (time: number) => void;
+  onScrub?: (time: number) => void; // Live scrub (throttled)
   theme: ThemeMode;
   currentSongId: string;
   onSongChange: (songId: string) => void;
@@ -58,6 +59,7 @@ const Controls: React.FC<ControlsProps> = ({
   currentTime, 
   duration, 
   onSeek,
+  onScrub,
   theme,
   currentSongId,
   onSongChange,
@@ -81,6 +83,8 @@ const Controls: React.FC<ControlsProps> = ({
   const isScrubbingRef = React.useRef(false);
   const [scrubTime, setScrubTime] = React.useState<number>(0);
   const scrubTimeRef = React.useRef<number>(0);
+  const lastScrubAtMsRef = React.useRef<number>(0);
+  const SCRUB_THROTTLE_MS = 33;
 
   const clampToDuration = (v: number) => {
     if (!Number.isFinite(v)) return 0;
@@ -102,12 +106,22 @@ const Controls: React.FC<ControlsProps> = ({
   };
 
   const updateScrubFromPointer = (el: HTMLInputElement, clientX: number) => {
-    if (!Number.isFinite(duration) || duration <= 0) return;
+    if (!Number.isFinite(duration) || duration <= 0) return null;
     const rect = el.getBoundingClientRect();
     const pct = rect.width > 0 ? (clientX - rect.left) / rect.width : 0;
     const v = clampToDuration(pct * duration);
     scrubTimeRef.current = v;
     setScrubTime(v);
+    return v;
+  };
+
+  const maybeScrub = (v: number | null, force = false) => {
+    if (!onScrub || v === null) return;
+    const now = performance.now();
+    if (force || now - lastScrubAtMsRef.current >= SCRUB_THROTTLE_MS) {
+      lastScrubAtMsRef.current = now;
+      onScrub(v);
+    }
   };
 
   const startScrub = (e: React.PointerEvent<HTMLInputElement>) => {
@@ -116,8 +130,10 @@ const Controls: React.FC<ControlsProps> = ({
     const el = e.currentTarget;
     isScrubbingRef.current = true;
     // Immediately set value based on pointer position (more reliable than relying on native range thumb).
-    updateScrubFromPointer(el, e.clientX);
+    const v = updateScrubFromPointer(el, e.clientX);
     setIsScrubbing(true);
+    // Fire an immediate scrub update for responsiveness.
+    maybeScrub(v, true);
     // Keep receiving pointer events even if the pointer leaves the track.
     try {
       el.setPointerCapture(e.pointerId);
@@ -128,7 +144,9 @@ const Controls: React.FC<ControlsProps> = ({
 
   const moveScrub = (e: React.PointerEvent<HTMLInputElement>) => {
     if (!isScrubbingRef.current) return;
-    updateScrubFromPointer(e.currentTarget, e.clientX);
+    const v = updateScrubFromPointer(e.currentTarget, e.clientX);
+    // Throttled live scrub updates (~33ms)
+    maybeScrub(v);
   };
 
   const endScrub = () => {
@@ -246,7 +264,9 @@ const Controls: React.FC<ControlsProps> = ({
           
           {/* Progress Fill */}
           <div 
-            className={`absolute top-0 left-0 h-full rounded-full transition-all duration-100 ${darkUI ? 'bg-white' : 'bg-black/70'}`}
+            className={`absolute top-0 left-0 h-full rounded-full ${
+              isScrubbing ? 'transition-none' : 'transition-all duration-100'
+            } ${darkUI ? 'bg-white' : 'bg-black/70'}`}
             style={{ width: `${duration ? (displayTime / duration) * 100 : 0}%` }}
           ></div>
           

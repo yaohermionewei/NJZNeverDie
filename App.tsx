@@ -747,6 +747,24 @@ const App: React.FC = () => {
     }
   }, [duration, ensureAudioContext, selfHeal, waitForTimeNear]);
 
+  // Live scrub: update audio/UI immediately (throttled by Controls to ~33ms)
+  const handleScrub = React.useCallback((time: number) => {
+    const audio = audioRef.current;
+    if (!audio || !Number.isFinite(time)) return;
+
+    const d = Number.isFinite(audio.duration) ? audio.duration : duration;
+    const t = Math.max(0, Math.min(time, Number.isFinite(d) && d > 0 ? d : time));
+    const now = performance.now();
+
+    // Prevent onTimeUpdate from snapping UI during live scrub
+    pendingSeekRef.current = { targetTime: t, startedAtMs: now, deadlineAtMs: now + 300 };
+    lastUserSeekAtMsRef.current = now;
+    lastTimeUpdateRef.current = t;
+    setCurrentTime(t);
+
+    try { audio.currentTime = t; } catch {}
+  }, [duration]);
+
   // Handle Volume
   const handleVolumeChange = (newVolume: number) => {
     setVolume(newVolume);
@@ -1249,6 +1267,7 @@ const App: React.FC = () => {
           currentTime={currentTime}
           duration={duration}
           onSeek={handleSeek}
+          onScrub={handleScrub}
           theme={theme}
           currentSongId={currentSongId}
           onSongChange={(id) => {
