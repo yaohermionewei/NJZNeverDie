@@ -1,6 +1,7 @@
 import React, { useRef, useEffect } from 'react';
 import * as THREE from 'three';
 import { SimplexNoise } from 'three/examples/jsm/math/SimplexNoise.js';
+import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import rabbitImg from '../assets/rabbit.webp';
 import rabbitFlyUpImg from '../assets/rabbitflyup.webp';
 import rabbitDropDownImg from '../assets/rabbitdropdown.webp';
@@ -93,6 +94,36 @@ const MAX_DT = 1 / 30; // clamp to avoid huge jumps on background/tab-switch or 
 // Rabbit horizontal hop settings
 const HOP_VELOCITY_THRESHOLD = 15.0;  // 动势超过此值才跳到其他方块
 const MAX_HOP_GRID_DISTANCE = 2;      // 最大跳跃格子数（曼哈顿距离）
+
+// 创建梯形圆角方块几何体
+const createTaperedRoundedBox = (
+  width: number, 
+  height: number, 
+  depth: number, 
+  smooth: number,    // 圆角平滑度（分段数）
+  radius: number,    // 圆角半径
+  taperScale: number // 顶部缩放比例 (0.82 = 顶部是底部的82%)
+): THREE.BufferGeometry => {
+  // 使用 RoundedBoxGeometry 作为基础
+  const geometry = new RoundedBoxGeometry(width, height, depth, smooth, radius);
+  const positions = geometry.attributes.position;
+  
+  // 修改顶部顶点，实现梯形效果
+  for (let i = 0; i < positions.count; i++) {
+    const y = positions.getY(i);
+    // 根据Y位置计算缩放（底部不变，顶部缩小）
+    const normalizedY = (y + height / 2) / height; // 0 at bottom, 1 at top
+    const scale = 1 - (1 - taperScale) * normalizedY;
+    
+    positions.setX(i, positions.getX(i) * scale);
+    positions.setZ(i, positions.getZ(i) * scale);
+  }
+  
+  positions.needsUpdate = true;
+  geometry.computeVertexNormals(); // 重新计算法线
+  
+  return geometry;
+};
 
 // Vertex Shader: Pass world Y position AND world normal to fragment shader
 const vertexShader = `
@@ -311,7 +342,7 @@ const CubesVisualizer: React.FC<CubesVisualizerProps> = ({
     rendererRef.current = renderer;
 
     // ===== CUBE GEOMETRY =====
-    const cubeGeometry = new THREE.BoxGeometry(1.0, 1, 1.0);
+    const cubeGeometry = createTaperedRoundedBox(1.0, 1, 1.0, 4, 0.1, 0.82);
     cubeGeometry.translate(0, 0.5, 0); // Pivot at bottom
 
     // ===== SHADER MATERIAL =====
