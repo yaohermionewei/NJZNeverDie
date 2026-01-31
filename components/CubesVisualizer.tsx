@@ -2,12 +2,12 @@ import React, { useRef, useEffect } from 'react';
 import * as THREE from 'three';
 import { SimplexNoise } from 'three/examples/jsm/math/SimplexNoise.js';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
-import rabbitImg from '../assets/rabbit.webp';
-import rabbitFlyUpImg from '../assets/rabbitflyup.webp';
-import rabbitDropDownImg from '../assets/rabbitdropdown.webp';
-import rabbitLeftImg from '../assets/rabbitleft.webp';
-import rabbitLeftFlyUpImg from '../assets/leftflyup.webp';
-import rabbitLeftDropDownImg from '../assets/leftdropdown.webp';
+import rabbitRightIdleImg from '../assets/rabbit/rabbit_right_idle.webp';
+import rabbitRightUpImg from '../assets/rabbit/rabbit_right_up.webp';
+import rabbitRightDownImg from '../assets/rabbit/rabbit_right_down.webp';
+import rabbitLeftIdleImg from '../assets/rabbit/rabbit_left_idle.webp';
+import rabbitLeftUpImg from '../assets/rabbit/rabbit_left_up.webp';
+import rabbitLeftDownImg from '../assets/rabbit/rabbit_left_down.webp';
 
 export interface CubesParams {
   height: number;
@@ -29,10 +29,10 @@ interface CubesColorScheme {
 
 const CUBES_COLOR_SCHEMES: Record<CubesTheme, CubesColorScheme> = {
   pink: {
-    bgTop: '#F5EEEE',
-    bgBottom: '#F3D4D6',
-    cubeBottom: [0.875, 0.392, 0.416], // #DF646A
-    cubeTop: [1.0, 0.969, 0.969],      // #FFF7F7
+    bgTop: '#FFF2F4',
+    bgBottom: '#FFE5E8',
+    cubeBottom: [0.953, 0.380, 0.435], // #F3616F
+    cubeTop: [1.0, 0.898, 0.910],      // #FFE5E8
   },
   purple: {
     bgTop: '#EFEFF7',
@@ -67,7 +67,8 @@ const CUBE_SPACING = 1.2;
 const MAX_HEIGHT = 6.0;
 
 // Rabbit physics tuning
-const RABBIT_Y_OFFSET = 0.6; // feet sit on cube top (increased from 0.4 for larger sprite)
+const RABBIT_SPRITE_SIZE = 2.0; // 精灵的宽高尺寸（Three.js 世界单位）
+const RABBIT_Y_OFFSET = (RABBIT_SPRITE_SIZE / 2) * 0.75; // 精灵底部相对于方块顶面的垂直偏移
 const MAX_RABBIT_HEIGHT = 6.0; // safety cap above cube top to prevent numeric explosions
 
 // Rabbit motion calibration:
@@ -384,17 +385,17 @@ const CubesVisualizer: React.FC<CubesVisualizerProps> = ({
     // ===== RABBIT INITIALIZATION =====
     const textureLoader = new THREE.TextureLoader();
     // Right-facing rabbit textures
-    const rabbitTextureIdle = textureLoader.load(rabbitImg);
-    const rabbitTextureUp = textureLoader.load(rabbitFlyUpImg);
-    const rabbitTextureDown = textureLoader.load(rabbitDropDownImg);
+    const rabbitTextureIdle = textureLoader.load(rabbitRightIdleImg);
+    const rabbitTextureUp = textureLoader.load(rabbitRightUpImg);
+    const rabbitTextureDown = textureLoader.load(rabbitRightDownImg);
     // Left-facing rabbit textures
-    const rabbitLeftTextureIdle = textureLoader.load(rabbitLeftImg);
-    const rabbitLeftTextureUp = textureLoader.load(rabbitLeftFlyUpImg);
-    const rabbitLeftTextureDown = textureLoader.load(rabbitLeftDropDownImg);
+    const rabbitLeftTextureIdle = textureLoader.load(rabbitLeftIdleImg);
+    const rabbitLeftTextureUp = textureLoader.load(rabbitLeftUpImg);
+    const rabbitLeftTextureDown = textureLoader.load(rabbitLeftDownImg);
     
     const numRightRabbits = 4;
-    const numLeftRabbits = 3;
-    const totalRabbits = numRightRabbits + numLeftRabbits; // 4 right + 3 left = 7 total
+    const numLeftRabbits = 4;
+    const totalRabbits = numRightRabbits + numLeftRabbits; // 4 right + 4 left = 8 total
     const rabbits: typeof rabbitsRef.current = [];
     const usedIndices = new Set<number>();
     
@@ -414,9 +415,8 @@ const CubesVisualizer: React.FC<CubesVisualizerProps> = ({
       // Each rabbit gets its own material so we can switch textures independently
       const material = new THREE.SpriteMaterial({ map: idleTexture });
       const sprite = new THREE.Sprite(material);
-      // Right-facing rabbits: 1.2, Left-facing rabbits: 1.4 (to match different asset sizes)
-      const spriteSize = isLeftFacing ? 1.4 : 1.2;
-      sprite.scale.set(spriteSize, spriteSize, 1);
+      // Use unified sprite size for both directions
+      sprite.scale.set(RABBIT_SPRITE_SIZE, RABBIT_SPRITE_SIZE, 1);
       
       // 获取初始方块位置
       const initCube = cubes[cubeIndex];
@@ -730,14 +730,10 @@ const CubesVisualizer: React.FC<CubesVisualizerProps> = ({
                   rabbit.sprite.position.y = landingTopY;
                   rabbit.hopProgress = 1;
                   
-                  // 弹跳逻辑
-                  if (Math.abs(rabbit.velocityY) > RABBIT_BOUNCE_STOP_VY_PER_SEC) {
-                    rabbit.velocityY = -rabbit.velocityY * RABBIT_BOUNCE_DAMPING;
-                  } else {
-                    rabbit.velocityY = 0;
-                    rabbit.isJumping = false;
-                    rabbit.sprite.material.map = rabbit.textures.idle;
-                  }
+                  // 落地直接进入 idle（取消弹跳）
+                  rabbit.velocityY = 0;
+                  rabbit.isJumping = false;
+                  rabbit.sprite.material.map = rabbit.textures.idle;
                 }
               }
             } else {

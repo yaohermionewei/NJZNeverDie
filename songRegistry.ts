@@ -45,7 +45,7 @@ export const SONGS: SongInfo[] = [
     audioSrc: dittoAudio,
     lrcSrc: dittoLrc,
     coverUrl: dittoCover,
-    themeColor: '#ff4d6a', // 红色
+    themeColor: '#F05A66', // Ditto 高亮色
     cubesTheme: 'pink'
   },
   {

@@ -208,15 +208,15 @@ const HiddenLyricScroller: React.FC<{
 };
 
 // Preload Cubes theme rabbit images (default theme - load immediately)
-import rabbitImg from './assets/rabbit.webp';
-import rabbitFlyUpImg from './assets/rabbitflyup.webp';
-import rabbitDropDownImg from './assets/rabbitdropdown.webp';
-import rabbitLeftImg from './assets/rabbitleft.webp';
-import rabbitLeftFlyUpImg from './assets/leftflyup.webp';
-import rabbitLeftDropDownImg from './assets/leftdropdown.webp';
+import rabbitRightIdleImg from './assets/rabbit/rabbit_right_idle.webp';
+import rabbitRightUpImg from './assets/rabbit/rabbit_right_up.webp';
+import rabbitRightDownImg from './assets/rabbit/rabbit_right_down.webp';
+import rabbitLeftIdleImg from './assets/rabbit/rabbit_left_idle.webp';
+import rabbitLeftUpImg from './assets/rabbit/rabbit_left_up.webp';
+import rabbitLeftDownImg from './assets/rabbit/rabbit_left_down.webp';
 
 // Start preloading before component mounts (browser will cache these)
-[rabbitImg, rabbitFlyUpImg, rabbitDropDownImg, rabbitLeftImg, rabbitLeftFlyUpImg, rabbitLeftDropDownImg]
+[rabbitRightIdleImg, rabbitRightUpImg, rabbitRightDownImg, rabbitLeftIdleImg, rabbitLeftUpImg, rabbitLeftDownImg]
   .forEach(src => { const img = new Image(); img.src = src; });
 
 const App: React.FC = () => {
@@ -413,6 +413,10 @@ const App: React.FC = () => {
     const newSong = getSongById(songId);
     if (!newSong || songId === currentSongId) return;
     
+    const wasPlaying = audioRef.current ? !audioRef.current.paused : isPlaying;
+    const shouldAutoPlay = forceAutoPlayRef.current || wasPlaying;
+    forceAutoPlayRef.current = false;
+    
     // Stop current playback
     if (audioRef.current) {
       audioRef.current.pause();
@@ -429,6 +433,7 @@ const App: React.FC = () => {
     lastLyricIndexRef.current = -1;
     
     // Switch to new song
+    shouldAutoPlayRef.current = shouldAutoPlay;
     setCurrentSongId(songId);
   };
 
@@ -456,6 +461,8 @@ const App: React.FC = () => {
   } | null>(null);
   const lastUserSeekAtMsRef = useRef<number>(0);
   const lastPlayAttemptAtMsRef = useRef<number>(0);
+  const shouldAutoPlayRef = useRef<boolean>(false);
+  const forceAutoPlayRef = useRef<boolean>(false);
   const recoveringRef = useRef<boolean>(false);
   const cooldownUntilMsRef = useRef<number>(0);
 
@@ -505,6 +512,26 @@ const App: React.FC = () => {
        window.removeEventListener('keydown', handleInteraction);
     };
   }, [ensureAudioContext]);
+
+  // Auto-play after song change when the previous song was playing
+  useEffect(() => {
+    if (!shouldAutoPlayRef.current) return;
+    const audio = audioRef.current;
+    if (!audio) return;
+    shouldAutoPlayRef.current = false;
+
+    const playNext = async () => {
+      try {
+        lastPlayAttemptAtMsRef.current = performance.now();
+        await ensureAudioContext();
+        await audio.play();
+      } catch {
+        // Ignore: play() can reject on mobile due to gesture policy or transient pipeline issues.
+      }
+    };
+
+    void playNext();
+  }, [currentSongId, ensureAudioContext]);
 
   // Toggle Play/Pause
   const togglePlay = React.useCallback(async () => {
@@ -726,6 +753,7 @@ const App: React.FC = () => {
   // Handle song end - auto play next song
   const onEnded = () => {
     // Auto skip to next song in playlist
+    forceAutoPlayRef.current = true;
     handleSkipNext();
   };
 
