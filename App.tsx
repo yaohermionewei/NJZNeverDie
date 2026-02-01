@@ -1022,7 +1022,8 @@ const App: React.FC = () => {
       style={{ height: 'var(--app-height, 100vh)' }}
     >
       
-      {/* Vinyl 背景模糊层：常驻挂载 + inline blur，避免 Tailwind CDN 首次进入时 blur 类“现编译”导致的露馅闪屏 */}
+      {/* Vinyl 背景模糊层（性能验证：先注释掉） */}
+      {/*
       <div
         aria-hidden="true"
         className={`absolute inset-0 z-0 bg-cover bg-center scale-125 origin-top-right transition-opacity transition-transform duration-1000 ${
@@ -1033,6 +1034,7 @@ const App: React.FC = () => {
           filter: 'blur(120px)',
         }}
       />
+      */}
 
       {/* Gradient Overlay Layer */}
       <div
