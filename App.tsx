@@ -1022,11 +1022,10 @@ const App: React.FC = () => {
       style={{ height: 'var(--app-height, 100vh)' }}
     >
       
-      {/* Vinyl 背景模糊层（性能验证：先注释掉） */}
-      {/*
+      {/* Vinyl 背景模糊层：仅 sm 及以上启用，移动端关闭以减轻负载 */}
       <div
         aria-hidden="true"
-        className={`absolute inset-0 z-0 bg-cover bg-center scale-125 origin-top-right transition-opacity transition-transform duration-1000 ${
+        className={`hidden sm:block absolute inset-0 z-0 bg-cover bg-center scale-125 origin-top-right transition-opacity transition-transform duration-1000 ${
           theme === 'vinyl' ? 'opacity-25' : 'opacity-0'
         }`}
         style={{
@@ -1034,7 +1033,6 @@ const App: React.FC = () => {
           filter: 'blur(120px)',
         }}
       />
-      */}
 
       {/* Gradient Overlay Layer */}
       <div

@@ -1,6 +1,6 @@
 
 import React, { useEffect, useRef, useState } from 'react';
-import doodleVinyl from '../doodlevingl-256.webp';
+import doodleVinyl from '../doodlevingl-768.webp';
 import rabbitSkate1 from '../assets/rabbitSkate1.webp';
 import rabbitSkate2 from '../assets/rabbitSkate2.webp';
 import rabbitSkate3 from '../assets/rabbitSkate3.webp';
