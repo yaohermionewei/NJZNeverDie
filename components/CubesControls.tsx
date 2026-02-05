@@ -8,7 +8,8 @@ const DEFAULT_PARAMS: CubesParams = {
   height: 0.9,
   spread: 1.5,
   damping: 0.25,
-  showRabbits: true
+  showRabbits: true,
+  showHearts: true
 };
 
 interface CubesControlsProps {
@@ -31,6 +32,10 @@ const CubesControls: React.FC<CubesControlsProps> = ({ params, onChange, isUIHid
 
   const handleToggleRabbits = () => {
     onChange({ ...params, showRabbits: !params.showRabbits });
+  };
+
+  const handleToggleHearts = () => {
+    onChange({ ...params, showHearts: !params.showHearts });
   };
 
   // UI隐藏时整个控制面板都隐藏
@@ -125,6 +130,23 @@ const CubesControls: React.FC<CubesControlsProps> = ({ params, onChange, isUIHid
             <span
               className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform duration-200 ${
                 params.showRabbits ? 'translate-x-5' : 'translate-x-0'
+              }`}
+            />
+          </button>
+        </div>
+
+        {/* Show Hearts Toggle */}
+        <div className="flex items-center justify-between">
+          <span className="text-xs font-medium text-black/40">{t('controls.show_heart')}</span>
+          <button
+            onClick={handleToggleHearts}
+            className={`relative w-10 h-5 rounded-full transition-colors duration-200 ${
+              params.showHearts ? 'bg-black/40' : 'bg-black/15'
+            }`}
+          >
+            <span
+              className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform duration-200 ${
+                params.showHearts ? 'translate-x-5' : 'translate-x-0'
               }`}
             />
           </button>
