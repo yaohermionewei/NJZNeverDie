@@ -14,6 +14,7 @@ export interface CubesParams {
   spread: number;
   damping: number;
   showRabbits: boolean;
+  showHearts: boolean;
 }
 
 // 配色方案类型
@@ -58,9 +59,35 @@ interface CubesVisualizerProps {
   uiBottomInsetPx?: number;
 }
 
-// 8x8 grid as per reference image
-const GRID_SIZE = 8;
+// Grid sizes
+const DEFAULT_GRID_SIZE = 8;
+const HEART_GRID_SIZE = 9;
 const CUBE_SPACING = 1.2;
+
+// Heart highlight colors (fixed, independent of theme)
+const HEART_COLOR_BOTTOM: [number, number, number] = [0.75, 0.75, 1.0]; // RGB(191, 191, 255)
+const HEART_COLOR_TOP: [number, number, number] = [1.0, 0.8, 0.88];      // RGB(255, 204, 224)
+const HEART_MAX_HEIGHT = 3.5;
+
+// 9x9 heart mask derived from docs/爱心99.csv (row0=top, col0=left)
+const HEART_MASK: string[] = [
+  '.........',
+  '..*...*..',
+  '.*.*.*.*.',
+  '.*..*..*.',
+  '.*.....*.',
+  '..*...*..',
+  '...*.*...',
+  '....*....',
+  '.........'
+];
+const HEART_INDICES = new Set<number>(
+  HEART_MASK.flatMap((row, rowIndex) => (
+    row.split('').map((cell, colIndex) => (
+      cell === '*' ? rowIndex * HEART_GRID_SIZE + colIndex : -1
+    ))
+  )).filter((i) => i >= 0)
+);
 
 // Maximum height for color mapping (global setting)
 // Lowered to 6.0 so mid-height cubes can reach brighter colors more easily
@@ -211,6 +238,7 @@ const CubesVisualizer: React.FC<CubesVisualizerProps> = ({
   const cubesRef = useRef<THREE.Mesh[]>([]);
   // Refs for color theme updates (avoid full scene rebuild)
   const shaderMaterialRef = useRef<THREE.ShaderMaterial | null>(null);
+  const heartShaderMaterialRef = useRef<THREE.ShaderMaterial | null>(null);
   const bgTextureRef = useRef<THREE.CanvasTexture | null>(null);
   const colorThemeRef = useRef<CubesTheme>(colorTheme); // Track current theme for init
   const rabbitsRef = useRef<{
@@ -229,11 +257,12 @@ const CubesVisualizer: React.FC<CubesVisualizerProps> = ({
     };
   }[]>([]);
   const audioDataRef = useRef<Uint8Array<ArrayBuffer>>(new Uint8Array(128));
-  const currentScalesRef = useRef<Float32Array>(new Float32Array(GRID_SIZE * GRID_SIZE).fill(1));
+  const currentScalesRef = useRef<Float32Array>(new Float32Array(HEART_GRID_SIZE * HEART_GRID_SIZE).fill(1));
   const animationIdRef = useRef<number | null>(null);
   const noiseRef = useRef<SimplexNoise>(new SimplexNoise());
   const uiBottomInsetPxRef = useRef<number>(0);
   const lookAtShiftRef = useRef<number>(0);
+  const gridSize = params.showHearts ? HEART_GRID_SIZE : DEFAULT_GRID_SIZE;
   
   // ===== RABBIT HOP HELPER FUNCTIONS =====
   // 获取所有被占用的方块（包括已预订的目标）- 防止冲突
@@ -260,8 +289,8 @@ const CubesVisualizer: React.FC<CubesVisualizerProps> = ({
 
   // 获取附近可跳跃的方块索引列表
   const getNearbyCubes = (currentIndex: number, maxDistance: number, excludeIndices: Set<number>): number[] => {
-    const currentRow = Math.floor(currentIndex / GRID_SIZE);
-    const currentCol = currentIndex % GRID_SIZE;
+    const currentRow = Math.floor(currentIndex / gridSize);
+    const currentCol = currentIndex % gridSize;
     const candidates: number[] = [];
     
     for (let dr = -maxDistance; dr <= maxDistance; dr++) {
@@ -272,8 +301,8 @@ const CubesVisualizer: React.FC<CubesVisualizerProps> = ({
         const newRow = currentRow + dr;
         const newCol = currentCol + dc;
         
-        if (newRow >= 0 && newRow < GRID_SIZE && newCol >= 0 && newCol < GRID_SIZE) {
-          const newIndex = newRow * GRID_SIZE + newCol;
+        if (newRow >= 0 && newRow < gridSize && newCol >= 0 && newCol < gridSize) {
+          const newIndex = newRow * gridSize + newCol;
           if (!excludeIndices.has(newIndex)) {
             candidates.push(newIndex);
           }
@@ -361,18 +390,31 @@ const CubesVisualizer: React.FC<CubesVisualizerProps> = ({
     });
     shaderMaterialRef.current = shaderMaterial;
 
+    const heartShaderMaterial = new THREE.ShaderMaterial({
+      vertexShader: vertexShader,
+      fragmentShader: fragmentShader,
+      uniforms: {
+        colorBottom: { value: new THREE.Color(...HEART_COLOR_BOTTOM) },
+        colorTop: { value: new THREE.Color(...HEART_COLOR_TOP) },
+        maxHeight: { value: HEART_MAX_HEIGHT }
+      }
+    });
+    heartShaderMaterialRef.current = heartShaderMaterial;
+
     const cubes: THREE.Mesh[] = [];
-    const halfGrid = (GRID_SIZE - 1) * CUBE_SPACING / 2;
-    const count = GRID_SIZE * GRID_SIZE;
+    const halfGrid = (gridSize - 1) * CUBE_SPACING / 2;
+    const count = gridSize * gridSize;
+    currentScalesRef.current = new Float32Array(count).fill(1);
     
     for (let i = 0; i < count; i++) {
-      const row = Math.floor(i / GRID_SIZE);
-      const col = i % GRID_SIZE;
+      const row = Math.floor(i / gridSize);
+      const col = i % gridSize;
       const x = col * CUBE_SPACING - halfGrid;
       const z = row * CUBE_SPACING - halfGrid;
 
-      // All cubes share the same geometry and shader material
-      const cube = new THREE.Mesh(cubeGeometry, shaderMaterial);
+      // All cubes share the same geometry; heart cubes use a fixed color material
+      const isHeart = params.showHearts && HEART_INDICES.has(i);
+      const cube = new THREE.Mesh(cubeGeometry, isHeart ? heartShaderMaterial : shaderMaterial);
       cube.position.set(x, 0, z);
       cube.scale.set(1, 1, 1);
       
@@ -473,8 +515,9 @@ const CubesVisualizer: React.FC<CubesVisualizerProps> = ({
       renderer.dispose();
       cubeGeometry.dispose();
       shaderMaterial.dispose();
+      heartShaderMaterial.dispose();
     };
-  }, []); // Only run once - color updates handled by separate useEffect
+  }, [gridSize]); // Rebuild only when grid size changes
 
   // ===== COLOR THEME UPDATE (lightweight, no scene rebuild) =====
   useEffect(() => {
@@ -537,7 +580,7 @@ const CubesVisualizer: React.FC<CubesVisualizerProps> = ({
     const cubes = cubesRef.current;
     const noise = noiseRef.current;
     const container = containerRef.current;
-    const halfGrid = (GRID_SIZE - 1) * CUBE_SPACING / 2;
+    const halfGrid = (gridSize - 1) * CUBE_SPACING / 2;
     const maxDistance = Math.sqrt(halfGrid * halfGrid + halfGrid * halfGrid);
 
     // Use a stable time source + dt clamp to make motion frame-rate independent.
@@ -584,18 +627,25 @@ const CubesVisualizer: React.FC<CubesVisualizerProps> = ({
 
       const audioData = audioDataRef.current;
       const count = cubes.length;
+      if (currentScalesRef.current.length !== count) {
+        currentScalesRef.current = new Float32Array(count).fill(1);
+      }
       // Old: Date.now() * 0.0005 increases by 0.5 per second. Keep the same slope using accumulated time.
       const time = t * 0.5;
+      const isOddGrid = gridSize % 2 === 1;
+      const centerIndex = Math.floor(gridSize / 2);
         
         for (let i = 0; i < count; i++) {
         const cube = cubes[i];
-        const row = Math.floor(i / GRID_SIZE);
-        const col = i % GRID_SIZE;
+        const row = Math.floor(i / gridSize);
+        const col = i % gridSize;
         const x = col * CUBE_SPACING - halfGrid;
         const z = row * CUBE_SPACING - halfGrid;
 
         const distance = Math.sqrt(x * x + z * z);
-        const normalizedDistance = distance / maxDistance;
+        const isCenter = isOddGrid && row === centerIndex && col === centerIndex;
+        const distanceForAudio = isCenter ? CUBE_SPACING * 0.9 : distance;
+        const normalizedDistance = distanceForAudio / maxDistance;
 
         const spreadFactor = 1.0 / Math.max(0.1, params.spread);
         const frequencyIndex = Math.floor(

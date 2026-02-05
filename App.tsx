@@ -342,20 +342,23 @@ const App: React.FC = () => {
 
   // Cubes Params State
   const [cubesParams, setCubesParams] = useState<CubesParams>(() => {
+    const defaultParams: CubesParams = {
+      height: 0.9,
+      spread: 1.5,
+      damping: 0.25,
+      showRabbits: true,
+      showHearts: true
+    };
     const saved = localStorage.getItem('cubesParams');
     if (saved) {
       try {
-        return JSON.parse(saved);
+        const parsed = JSON.parse(saved);
+        return { ...defaultParams, ...parsed };
       } catch (e) {
         console.error("Failed to parse cubes params", e);
       }
     }
-    return {
-      height: 0.9,
-      spread: 1.5,
-      damping: 0.25,
-      showRabbits: true
-    };
+    return defaultParams;
   });
 
   // Powerpuff Params State
