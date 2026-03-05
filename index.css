@@ -2,5 +2,42 @@
 @tailwind components;
 @tailwind utilities;
 
+@keyframes song-title-marquee-scroll {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+.song-title-marquee {
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.song-title-marquee-track {
+  display: inline-flex;
+  min-width: max-content;
+  will-change: transform;
+  animation: song-title-marquee-scroll 10s linear infinite;
+}
+
+.song-title-marquee-segment {
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+}
+
+.song-title-marquee-gap {
+  width: 2rem;
+  flex-shrink: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .song-title-marquee-track {
+    animation: none;
+  }
+}
 
 

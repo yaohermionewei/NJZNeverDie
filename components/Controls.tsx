@@ -75,6 +75,7 @@ const Controls: React.FC<ControlsProps> = ({
 }) => {
   const darkUI = isDarkTheme(theme);
   const isCubes = theme === 'cubes';
+  const hideCoverOnSmall = theme === 'particle' || theme === 'cubes' || theme === 'powerpuff';
   const { t } = useTranslation();
 
   // Progress scrubbing (desktop bugfix): while user drags, keep a local value so audio timeupdate
@@ -173,11 +174,25 @@ const Controls: React.FC<ControlsProps> = ({
             <img 
               src={coverUrl} 
               alt={songTitle}
-              className="w-12 h-12 rounded-lg object-cover flex-shrink-0 shadow-md"
+              className={`w-12 h-12 rounded-lg object-cover flex-shrink-0 shadow-md ${
+                hideCoverOnSmall ? 'hidden sm:block' : ''
+              }`}
             />
           )}
           <div className="min-w-0">
-            <p className={`text-sm font-normal truncate ${darkUI ? 'text-white/80' : 'text-gray-700'}`}>
+            <div className="sm:hidden song-title-marquee" title={songTitle}>
+              <div className="song-title-marquee-track">
+                <span className={`song-title-marquee-segment text-sm font-normal ${darkUI ? 'text-white/80' : 'text-gray-700'}`}>
+                  <span className="whitespace-nowrap">{songTitle}</span>
+                  <span className="song-title-marquee-gap" aria-hidden="true" />
+                </span>
+                <span className={`song-title-marquee-segment text-sm font-normal ${darkUI ? 'text-white/80' : 'text-gray-700'}`} aria-hidden="true">
+                  <span className="whitespace-nowrap">{songTitle}</span>
+                  <span className="song-title-marquee-gap" aria-hidden="true" />
+                </span>
+              </div>
+            </div>
+            <p className={`hidden sm:block text-sm font-normal truncate ${darkUI ? 'text-white/80' : 'text-gray-700'}`}>
               {songTitle}
             </p>
             <p className={`text-xs truncate ${darkUI ? 'text-white/50' : 'text-gray-400'}`}>
@@ -239,10 +254,10 @@ const Controls: React.FC<ControlsProps> = ({
       </div>
 
       {/* Progress Bar - Moved below controls */}
-      <div className={`flex items-center gap-3 w-full max-w-3xl mx-auto text-xs font-medium transition-colors ${
+      <div className={`flex items-center gap-2 sm:gap-3 w-full max-w-3xl mx-auto text-xs font-medium transition-colors ${
         darkUI ? 'text-white/40 hover:text-white/60' : 'text-black/40 hover:text-black/60'
       }`}>
-        <span className="w-10 text-right tabular-nums">{formatTime(displayTime)}</span>
+        <span className="w-[2.25rem] text-left sm:w-10 sm:text-right tabular-nums">{formatTime(displayTime)}</span>
         <div className="relative flex-1 h-[3px] group cursor-pointer flex items-center">
            <input 
             type="range" 
@@ -287,7 +302,7 @@ const Controls: React.FC<ControlsProps> = ({
             />
           )}
         </div>
-        <span className="w-10 tabular-nums">{formatTime(duration)}</span>
+        <span className="w-[2.25rem] text-right sm:w-10 sm:text-left tabular-nums">{formatTime(duration)}</span>
       </div>
 
       {/* 播放列表抽屉已移动到 App.tsx（避免底部栏 transform 导致 fixed 失效） */}
