@@ -1115,7 +1115,7 @@ const App: React.FC = () => {
            
            {/* Hidden UI Lyrics & Song Info: sm/md centered and slightly lower; lg keeps left layout */}
            {isUIHidden && (
-             <div className="absolute bottom-8 lg:bottom-12 left-0 right-0 lg:left-12 lg:right-auto z-20 flex flex-col items-center lg:items-start pointer-events-none animate-in fade-in duration-500">
+             <div className="absolute bottom-6 md:bottom-8 lg:bottom-12 left-0 right-0 lg:left-12 lg:right-auto z-20 flex flex-col items-center lg:items-start pointer-events-none animate-in fade-in duration-500">
                {/* sm/md: centered two-line lyrics */}
                <div className="w-full lg:hidden">
                  <HiddenLyricScroller
