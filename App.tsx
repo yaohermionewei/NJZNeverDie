@@ -1113,24 +1113,40 @@ const App: React.FC = () => {
              isUIHidden={isUIHidden}
            />
            
-           {/* Hidden UI Lyrics & Song Info (Bottom Left) */}
+           {/* Hidden UI Lyrics & Song Info: sm/md centered and slightly lower; lg keeps left layout */}
            {isUIHidden && (
-             <div className="absolute bottom-12 left-12 z-20 flex flex-col pointer-events-none animate-in fade-in duration-500">
-               {/* 两行歌词（滚动 + 折行占两行 + 下一句延后显示） */}
-               <HiddenLyricScroller
-                 lyrics={lyrics}
-                 currentIndex={currentIndex}
-                 align="left"
-                 // Max width is crucial on mobile here; otherwise the container shrink-wraps and text can't wrap.
-                 widthStyle={{ width: 'min(520px, calc(100vw - 96px))' }}
-                 inactiveColor="black"
-                 activeColor={currentSong.themeColor}
-                 inactiveOpacity={0.4}
-                 activeOpacity={1}
-               />
+             <div className="absolute bottom-8 lg:bottom-12 left-0 right-0 lg:left-12 lg:right-auto z-20 flex flex-col items-center lg:items-start pointer-events-none animate-in fade-in duration-500">
+               {/* sm/md: centered two-line lyrics */}
+               <div className="w-full lg:hidden">
+                 <HiddenLyricScroller
+                   lyrics={lyrics}
+                   currentIndex={currentIndex}
+                   align="center"
+                   paddingClassName="px-10"
+                   widthStyle={{ width: '100%' }}
+                   inactiveColor="black"
+                   activeColor={currentSong.themeColor}
+                   inactiveOpacity={0.4}
+                   activeOpacity={1}
+                 />
+               </div>
+
+               {/* lg: keep original left-aligned lyrics block */}
+               <div className="hidden lg:block">
+                 <HiddenLyricScroller
+                   lyrics={lyrics}
+                   currentIndex={currentIndex}
+                   align="left"
+                   widthStyle={{ width: 'min(520px, calc(100vw - 96px))' }}
+                   inactiveColor="black"
+                   activeColor={currentSong.themeColor}
+                   inactiveOpacity={0.4}
+                   activeOpacity={1}
+                 />
+               </div>
 
           {/* Song Info */}
-              <div className="text-[14px] text-black/20 font-normal mt-4">
+              <div className="text-[14px] text-black/20 font-normal mt-4 text-center lg:text-left">
                 {formattedSongInfo}
               </div>
            </div>
