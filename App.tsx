@@ -611,20 +611,34 @@ const App: React.FC = () => {
     }
   }, [ensureAudioContext]);
 
-  const waitForTimeNear = React.useCallback(async (targetTime: number, timeoutMs: number) => {
+  const waitForTimeNear = React.useCallback(async (
+    targetTime: number,
+    timeoutMs: number,
+    opts?: { epsilon?: number; acceptPastTarget?: boolean }
+  ) => {
     const audio = audioRef.current;
     if (!audio) return false;
     const start = performance.now();
-    const EPS = 0.25; // seconds
+    const EPS = opts?.epsilon ?? 0.25; // seconds
+    const acceptPastTarget = opts?.acceptPastTarget ?? false;
     while (performance.now() - start < timeoutMs) {
       const t = audio.currentTime;
-      if (Number.isFinite(t) && Math.abs(t - targetTime) <= EPS) return true;
+      if (Number.isFinite(t)) {
+        if (acceptPastTarget) {
+          if (t >= targetTime - EPS) return true;
+        } else if (Math.abs(t - targetTime) <= EPS) {
+          return true;
+        }
+      }
       await new Promise((r) => setTimeout(r, 50));
     }
     return false;
   }, []);
 
-  const selfHeal = React.useCallback(async (reason: 'watchdog' | 'seek') => {
+  const selfHeal = React.useCallback(async (
+    reason: 'watchdog' | 'seek',
+    opts?: { targetTime?: number }
+  ) => {
     const audio = audioRef.current;
     if (!audio) return false;
     const now = performance.now();
@@ -633,17 +647,25 @@ const App: React.FC = () => {
     recoveringRef.current = true;
     cooldownUntilMsRef.current = now + 5000;
 
-    const t0 = Number.isFinite(audio.currentTime) ? audio.currentTime : 0;
+    const dNow = Number.isFinite(audio.duration) ? audio.duration : duration;
+    const clampToDuration = (v: number) => {
+      const max = Number.isFinite(dNow) && dNow > 0 ? Math.max(0, dNow - 0.01) : v;
+      return Math.max(0, Math.min(v, max));
+    };
+    const fallbackTime = Number.isFinite(audio.currentTime) ? audio.currentTime : 0;
+    const requestedTime = opts?.targetTime;
+    const baseTime = Number.isFinite(requestedTime) ? (requestedTime as number) : fallbackTime;
+    const t0 = clampToDuration(baseTime);
+    const softTarget = reason === 'seek' ? t0 : Math.max(0, t0 - 0.05);
 
     const trySoft = async () => {
       try { await ensureAudioContext(); } catch {}
       try { audio.pause(); } catch {}
-      try { audio.currentTime = Math.max(0, t0 - 0.05); } catch {}
+      try { audio.currentTime = softTarget; } catch {}
       try {
         lastPlayAttemptAtMsRef.current = performance.now();
         await audio.play();
-        // Give it a brief moment to move.
-        const ok = await waitForTimeNear(Math.max(0, t0 - 0.05), 400);
+        const ok = await waitForTimeNear(softTarget, 400, { epsilon: 0.6, acceptPastTarget: true });
         return ok;
       } catch {
         return false;
@@ -678,12 +700,12 @@ const App: React.FC = () => {
         if (src) (audio as any).src = src;
         audio.load();
         await waitCanPlay();
-        const d = Number.isFinite(audio.duration) ? audio.duration : duration;
+        const d = Number.isFinite(audio.duration) ? audio.duration : dNow;
         const t = Math.max(0, Math.min(t0, Number.isFinite(d) && d > 0 ? d - 0.01 : t0));
         try { audio.currentTime = t; } catch {}
         lastPlayAttemptAtMsRef.current = performance.now();
         await audio.play();
-        const ok = await waitForTimeNear(t, 600);
+        const ok = await waitForTimeNear(t, 600, { epsilon: 0.6, acceptPastTarget: true });
         return ok;
       } catch {
         return false;
@@ -724,14 +746,14 @@ const App: React.FC = () => {
           // ignore
         }
       }
-      const ok = await waitForTimeNear(t, 900);
+      const ok = await waitForTimeNear(t, 900, { epsilon: 0.6, acceptPastTarget: true });
       return ok;
     };
 
     let ok = await attempt();
     if (!ok) {
       // heal and retry once
-      await selfHeal('seek');
+      await selfHeal('seek', { targetTime: t });
       ok = await attempt();
     }
 
