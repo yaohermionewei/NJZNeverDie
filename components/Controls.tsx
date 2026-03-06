@@ -173,11 +173,18 @@ const Controls: React.FC<ControlsProps> = ({
     maybeScrub(v);
   };
 
-  const endScrub = () => {
+  const endScrub = (e?: React.PointerEvent<HTMLInputElement>) => {
     if (!isScrubbingRef.current) return;
+    let finalTime = scrubTimeRef.current;
+    if (e) {
+      const v = updateScrubFromPointer(e.currentTarget, e.clientX);
+      if (v !== null) {
+        finalTime = v;
+      }
+    }
     isScrubbingRef.current = false;
     setIsScrubbing(false);
-    onSeek(clampToDuration(scrubTimeRef.current));
+    onSeek(clampToDuration(finalTime));
   };
 
   return (
@@ -294,8 +301,8 @@ const Controls: React.FC<ControlsProps> = ({
             onChange={handleSeekChange}
             onPointerDown={startScrub}
             onPointerMove={moveScrub}
-            onPointerUp={endScrub}
-            onPointerCancel={endScrub}
+            onPointerUp={(e) => endScrub(e)}
+            onPointerCancel={() => endScrub()}
             // Mobile: increase hit area without changing visual thickness.
             // Keep the visual track at 3px, but make the invisible input tall and centered.
             className="absolute left-0 right-0 top-1/2 -translate-y-1/2 w-full h-8 opacity-0 cursor-pointer z-20 touch-none"
