@@ -224,6 +224,7 @@ const App: React.FC = () => {
   const [theme, setTheme] = useState<ThemeMode>('cubes');
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
+  const [isAudioLoading, setIsAudioLoading] = useState(false);
   const [currentSongId, setCurrentSongId] = useState<string>(getDefaultSong().id);
   const [volume, setVolume] = useState(0.8);
   const [analyser, setAnalyser] = useState<AnalyserNode | null>(null);
@@ -430,6 +431,7 @@ const App: React.FC = () => {
     setCurrentTime(0);
     setDuration(0);
     setIsPlaying(false);
+    setIsAudioLoading(false);
     
     // Reset throttle refs for new song
     lastTimeUpdateRef.current = 0;
@@ -469,6 +471,7 @@ const App: React.FC = () => {
   const recoveringRef = useRef<boolean>(false);
   const cooldownUntilMsRef = useRef<number>(0);
   const lastBackgroundTimeRef = useRef<number | null>(null);
+  const lastRequestedSeekTimeRef = useRef<number | null>(null);
 
   const initAudioContext = React.useCallback(() => {
       if (!audioRef.current || sourceRef.current) return;
@@ -521,6 +524,7 @@ const App: React.FC = () => {
         // ignore
       }
       setIsPlaying(false);
+      setIsAudioLoading(false);
       const ctx = audioContextRef.current;
       if (ctx) {
         ctx.suspend().catch(() => {});
@@ -729,6 +733,8 @@ const App: React.FC = () => {
 
     const d = Number.isFinite(audio.duration) ? audio.duration : duration;
     const t = Math.max(0, Math.min(time, Number.isFinite(d) && d > 0 ? d : time));
+    lastRequestedSeekTimeRef.current = t;
+    setIsAudioLoading(true);
 
     // Expose desired time immediately for UI; onTimeUpdate will respect seek grace.
     pendingSeekRef.current = { targetTime: t, startedAtMs: now, deadlineAtMs: now + 1200 };
@@ -759,16 +765,15 @@ const App: React.FC = () => {
 
     if (ok) {
       pendingSeekRef.current = null;
+      setIsAudioLoading(false);
       // Keep throttle refs consistent with a successful user seek.
       lastTimeUpdateRef.current = t;
     } else {
-      // Give up: fall back to real audio time to avoid a permanently fake UI.
+      // Keep anchor at target and show loading state; don't snap back to front on slow network.
       pendingSeekRef.current = null;
-      const real = audio.currentTime;
-      if (Number.isFinite(real)) {
-        lastTimeUpdateRef.current = real;
-        setCurrentTime(real);
-      }
+      lastTimeUpdateRef.current = t;
+      setCurrentTime(t);
+      setIsAudioLoading(true);
     }
   }, [duration, ensureAudioContext, selfHeal, waitForTimeNear]);
 
@@ -780,6 +785,7 @@ const App: React.FC = () => {
     const d = Number.isFinite(audio.duration) ? audio.duration : duration;
     const t = Math.max(0, Math.min(time, Number.isFinite(d) && d > 0 ? d : time));
     const now = performance.now();
+    lastRequestedSeekTimeRef.current = t;
 
     // Prevent onTimeUpdate from snapping UI during live scrub
     pendingSeekRef.current = { targetTime: t, startedAtMs: now, deadlineAtMs: now + 300 };
@@ -803,6 +809,16 @@ const App: React.FC = () => {
   const onTimeUpdate = () => {
     if (!audioRef.current) return;
     const newTime = audioRef.current.currentTime;
+    const seekTarget = lastRequestedSeekTimeRef.current;
+    if (isAudioLoading && Number.isFinite(newTime)) {
+      if (seekTarget != null) {
+        if (newTime >= Math.max(0, seekTarget - 0.8)) {
+          setIsAudioLoading(false);
+        }
+      } else if (newTime > 0.2) {
+        setIsAudioLoading(false);
+      }
+    }
 
     // Seek grace: after a user seek, avoid having timeupdate immediately snap UI back to 0
     // if the underlying media pipeline failed to apply the seek yet. If it doesn't settle
@@ -817,6 +833,10 @@ const App: React.FC = () => {
       } else {
         pendingSeekRef.current = null;
       }
+    }
+
+    if (isAudioLoading && seekTarget != null && Number.isFinite(newTime) && newTime < seekTarget - 2.0) {
+      return;
     }
     
     // Calculate which lyric line should be active
@@ -864,19 +884,44 @@ const App: React.FC = () => {
     if (!audio) return;
 
     const handlePlay = () => setIsPlaying(true);
-    const handlePause = () => setIsPlaying(false);
+    const handlePause = () => {
+      setIsPlaying(false);
+      setIsAudioLoading(false);
+    };
+    const handleWaiting = () => {
+      if (!audio.paused) setIsAudioLoading(true);
+    };
+    const handleStalled = () => {
+      if (!audio.paused) setIsAudioLoading(true);
+    };
+    const handleCanPlay = () => setIsAudioLoading(false);
+    const handlePlaying = () => setIsAudioLoading(false);
+    const handleSeeking = () => setIsAudioLoading(true);
+    const handleSeeked = () => setIsAudioLoading(false);
 
     // Initialize volume
     audio.volume = volume;
 
     audio.addEventListener('play', handlePlay);
     audio.addEventListener('pause', handlePause);
+    audio.addEventListener('waiting', handleWaiting);
+    audio.addEventListener('stalled', handleStalled);
+    audio.addEventListener('canplay', handleCanPlay);
+    audio.addEventListener('playing', handlePlaying);
+    audio.addEventListener('seeking', handleSeeking);
+    audio.addEventListener('seeked', handleSeeked);
 
     return () => {
       audio.removeEventListener('play', handlePlay);
       audio.removeEventListener('pause', handlePause);
+      audio.removeEventListener('waiting', handleWaiting);
+      audio.removeEventListener('stalled', handleStalled);
+      audio.removeEventListener('canplay', handleCanPlay);
+      audio.removeEventListener('playing', handlePlaying);
+      audio.removeEventListener('seeking', handleSeeking);
+      audio.removeEventListener('seeked', handleSeeked);
     };
-  }, [currentSong]);
+  }, [currentSong, volume]);
 
   // Watchdog: detect "playing but audio.currentTime not advancing" and self-heal.
   useEffect(() => {
@@ -1303,7 +1348,8 @@ const App: React.FC = () => {
           null
         )}
         <Controls 
-          isPlaying={isPlaying}  
+          isPlaying={isPlaying}
+          isLoading={isAudioLoading}
           onPlayPause={togglePlay} 
           currentTime={currentTime}
           duration={duration}
