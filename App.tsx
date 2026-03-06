@@ -428,6 +428,7 @@ const App: React.FC = () => {
     }
     
     // Reset state
+    seekRequestSeqRef.current += 1;
     setCurrentTime(0);
     setDuration(0);
     setIsPlaying(false);
@@ -472,6 +473,7 @@ const App: React.FC = () => {
   const cooldownUntilMsRef = useRef<number>(0);
   const lastBackgroundTimeRef = useRef<number | null>(null);
   const lastRequestedSeekTimeRef = useRef<number | null>(null);
+  const seekRequestSeqRef = useRef<number>(0);
 
   const initAudioContext = React.useCallback(() => {
       if (!audioRef.current || sourceRef.current) return;
@@ -728,6 +730,9 @@ const App: React.FC = () => {
     const audio = audioRef.current;
     if (!audio) return;
     const autoPlay = opts?.autoPlay ?? true;
+    const requestSeq = seekRequestSeqRef.current + 1;
+    seekRequestSeqRef.current = requestSeq;
+    const isStale = () => requestSeq !== seekRequestSeqRef.current;
     const now = performance.now();
     lastUserSeekAtMsRef.current = now;
 
@@ -742,8 +747,11 @@ const App: React.FC = () => {
     lastTimeUpdateRef.current = t;
 
     const attempt = async () => {
+      if (isStale()) return false;
       try { await ensureAudioContext(); } catch {}
+      if (isStale()) return false;
       try { audio.currentTime = t; } catch {}
+      if (isStale()) return false;
       if (autoPlay) {
         try {
           lastPlayAttemptAtMsRef.current = performance.now();
@@ -752,15 +760,20 @@ const App: React.FC = () => {
           // ignore
         }
       }
+      if (isStale()) return false;
       const ok = await waitForTimeNear(t, 900, { epsilon: 0.6, acceptPastTarget: true });
+      if (isStale()) return false;
       return ok;
     };
 
     let ok = await attempt();
+    if (isStale()) return;
     if (!ok) {
       // heal and retry once
       await selfHeal('seek', { targetTime: t });
+      if (isStale()) return;
       ok = await attempt();
+      if (isStale()) return;
     }
 
     if (ok) {
@@ -782,6 +795,7 @@ const App: React.FC = () => {
     const audio = audioRef.current;
     if (!audio || !Number.isFinite(time)) return;
 
+    seekRequestSeqRef.current += 1;
     const d = Number.isFinite(audio.duration) ? audio.duration : duration;
     const t = Math.max(0, Math.min(time, Number.isFinite(d) && d > 0 ? d : time));
     const now = performance.now();
