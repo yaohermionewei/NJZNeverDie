@@ -224,7 +224,9 @@ const App: React.FC = () => {
   const [theme, setTheme] = useState<ThemeMode>('cubes');
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
-  const [isAudioLoading, setIsAudioLoading] = useState(false);
+  const [seekLoading, setSeekLoading] = useState(false);
+  const [networkLoading, setNetworkLoading] = useState(false);
+  const isAudioLoading = seekLoading || networkLoading;
   const [currentSongId, setCurrentSongId] = useState<string>(getDefaultSong().id);
   const [volume, setVolume] = useState(0.8);
   const [analyser, setAnalyser] = useState<AnalyserNode | null>(null);
@@ -428,11 +430,11 @@ const App: React.FC = () => {
     }
     
     // Reset state
-    seekRequestSeqRef.current += 1;
+    cancelSeekTxn({ invalidate: true });
     setCurrentTime(0);
     setDuration(0);
     setIsPlaying(false);
-    setIsAudioLoading(false);
+    setNetworkLoading(false);
     
     // Reset throttle refs for new song
     lastTimeUpdateRef.current = 0;
@@ -465,6 +467,13 @@ const App: React.FC = () => {
     startedAtMs: number;
     deadlineAtMs: number;
   } | null>(null);
+  const seekTxnRef = useRef<{
+    id: number;
+    targetTime: number;
+    active: boolean;
+    shouldResume: boolean;
+    prevMuted: boolean;
+  } | null>(null);
   const lastUserSeekAtMsRef = useRef<number>(0);
   const lastPlayAttemptAtMsRef = useRef<number>(0);
   const shouldAutoPlayRef = useRef<boolean>(false);
@@ -474,6 +483,11 @@ const App: React.FC = () => {
   const lastBackgroundTimeRef = useRef<number | null>(null);
   const lastRequestedSeekTimeRef = useRef<number | null>(null);
   const seekRequestSeqRef = useRef<number>(0);
+  const seekLoadingRef = useRef<boolean>(false);
+
+  useEffect(() => {
+    seekLoadingRef.current = seekLoading;
+  }, [seekLoading]);
 
   const initAudioContext = React.useCallback(() => {
       if (!audioRef.current || sourceRef.current) return;
@@ -509,6 +523,81 @@ const App: React.FC = () => {
     }
   }, [initAudioContext]);
 
+  const cancelSeekTxn = React.useCallback((opts?: { invalidate?: boolean }) => {
+    const audio = audioRef.current;
+    const txn = seekTxnRef.current;
+    pendingSeekRef.current = null;
+    if (txn && audio) {
+      try { audio.muted = txn.prevMuted; } catch {}
+      seekTxnRef.current = { ...txn, active: false, shouldResume: false };
+    }
+    if (opts?.invalidate ?? true) {
+      seekRequestSeqRef.current += 1;
+    }
+    setSeekLoading(false);
+  }, []);
+
+  const beginSeekTxn = React.useCallback((targetTime: number, autoPlay: boolean) => {
+    const audio = audioRef.current;
+    if (!audio) return null;
+    const requestId = seekRequestSeqRef.current + 1;
+    seekRequestSeqRef.current = requestId;
+    const prevTxn = seekTxnRef.current;
+    const prevMuted = prevTxn?.active ? prevTxn.prevMuted : audio.muted;
+    seekTxnRef.current = {
+      id: requestId,
+      targetTime,
+      active: true,
+      shouldResume: autoPlay || !audio.paused,
+      prevMuted
+    };
+    lastRequestedSeekTimeRef.current = targetTime;
+    setSeekLoading(true);
+    setNetworkLoading(false);
+    try { audio.muted = true; } catch {}
+    return requestId;
+  }, []);
+
+  const isSeekRequestStale = React.useCallback((requestId: number) => {
+    const txn = seekTxnRef.current;
+    return requestId !== seekRequestSeqRef.current || txn?.id !== requestId;
+  }, []);
+
+  const completeSeekTxnIfReady = React.useCallback((opts?: { requestId?: number; forceResume?: boolean }) => {
+    const audio = audioRef.current;
+    const txn = seekTxnRef.current;
+    if (!audio || !txn || !txn.active) return false;
+    if (txn.id !== seekRequestSeqRef.current) return false;
+    if (opts?.requestId != null && txn.id !== opts.requestId) return false;
+
+    const target = Math.max(0, txn.targetTime);
+    const nearTarget = Number.isFinite(audio.currentTime) && audio.currentTime >= Math.max(0, target - 0.35);
+    const shouldResume = (opts?.forceResume ?? true) && txn.shouldResume;
+    const minReadyState = shouldResume
+      ? HTMLMediaElement.HAVE_FUTURE_DATA
+      : HTMLMediaElement.HAVE_CURRENT_DATA;
+    const ready = audio.readyState >= minReadyState;
+    if (!nearTarget || !ready) return false;
+
+    seekTxnRef.current = { ...txn, active: false, shouldResume: false };
+    setSeekLoading(false);
+    setNetworkLoading(false);
+    try { audio.muted = txn.prevMuted; } catch {}
+
+    if ((opts?.forceResume ?? true) && txn.shouldResume && audio.paused) {
+      void (async () => {
+        try {
+          lastPlayAttemptAtMsRef.current = performance.now();
+          await ensureAudioContext();
+          await audio.play();
+        } catch {
+          // ignore
+        }
+      })();
+    }
+    return true;
+  }, [ensureAudioContext]);
+
   // Background handling: force pause and freeze time to avoid mobile pipeline drift.
   useEffect(() => {
     const audio = audioRef.current;
@@ -520,13 +609,14 @@ const App: React.FC = () => {
       pendingSeekRef.current = null;
       shouldAutoPlayRef.current = false;
       forceAutoPlayRef.current = false;
+      cancelSeekTxn({ invalidate: true });
       try {
         audio.pause();
       } catch {
         // ignore
       }
       setIsPlaying(false);
-      setIsAudioLoading(false);
+      setNetworkLoading(false);
       const ctx = audioContextRef.current;
       if (ctx) {
         ctx.suspend().catch(() => {});
@@ -565,7 +655,7 @@ const App: React.FC = () => {
       window.removeEventListener('pagehide', handlePageHide);
       window.removeEventListener('pageshow', handlePageShow);
     };
-  }, []);
+  }, [cancelSeekTxn]);
 
   // Initialize/Resume AudioContext on first real user interaction (mobile autoplay policies)
   useEffect(() => {
@@ -610,12 +700,14 @@ const App: React.FC = () => {
         await ensureAudioContext();
         await audio.play();
     } else {
+        cancelSeekTxn({ invalidate: true });
         audio.pause();
+        setNetworkLoading(false);
       }
     } catch {
       // Ignore: play() can reject on mobile due to gesture policy or transient pipeline issues.
     }
-  }, [ensureAudioContext]);
+  }, [cancelSeekTxn, ensureAudioContext]);
 
   const waitForTimeNear = React.useCallback(async (
     targetTime: number,
@@ -730,16 +822,14 @@ const App: React.FC = () => {
     const audio = audioRef.current;
     if (!audio) return;
     const autoPlay = opts?.autoPlay ?? true;
-    const requestSeq = seekRequestSeqRef.current + 1;
-    seekRequestSeqRef.current = requestSeq;
-    const isStale = () => requestSeq !== seekRequestSeqRef.current;
     const now = performance.now();
     lastUserSeekAtMsRef.current = now;
 
     const d = Number.isFinite(audio.duration) ? audio.duration : duration;
     const t = Math.max(0, Math.min(time, Number.isFinite(d) && d > 0 ? d : time));
-    lastRequestedSeekTimeRef.current = t;
-    setIsAudioLoading(true);
+    const requestId = beginSeekTxn(t, autoPlay);
+    if (requestId == null) return;
+    const isStale = () => isSeekRequestStale(requestId);
 
     // Expose desired time immediately for UI; onTimeUpdate will respect seek grace.
     pendingSeekRef.current = { targetTime: t, startedAtMs: now, deadlineAtMs: now + 1200 };
@@ -776,19 +866,18 @@ const App: React.FC = () => {
       if (isStale()) return;
     }
 
+    pendingSeekRef.current = null;
     if (ok) {
-      pendingSeekRef.current = null;
-      setIsAudioLoading(false);
       // Keep throttle refs consistent with a successful user seek.
       lastTimeUpdateRef.current = t;
+      void completeSeekTxnIfReady({ requestId, forceResume: true });
     } else {
       // Keep anchor at target and show loading state; don't snap back to front on slow network.
-      pendingSeekRef.current = null;
       lastTimeUpdateRef.current = t;
       setCurrentTime(t);
-      setIsAudioLoading(true);
+      setSeekLoading(true);
     }
-  }, [duration, ensureAudioContext, selfHeal, waitForTimeNear]);
+  }, [beginSeekTxn, completeSeekTxnIfReady, duration, ensureAudioContext, isSeekRequestStale, selfHeal, waitForTimeNear]);
 
   // Live scrub: update audio/UI immediately (throttled by Controls to ~33ms)
   const handleScrub = React.useCallback((time: number) => {
@@ -806,6 +895,7 @@ const App: React.FC = () => {
     lastUserSeekAtMsRef.current = now;
     lastTimeUpdateRef.current = t;
     setCurrentTime(t);
+    setNetworkLoading(false);
 
     try { audio.currentTime = t; } catch {}
   }, [duration]);
@@ -821,36 +911,32 @@ const App: React.FC = () => {
   // Update time - optimized to reduce unnecessary re-renders
   // Only update state when: 1) lyric changes, or 2) 1 second has passed
   const onTimeUpdate = () => {
-    if (!audioRef.current) return;
-    const newTime = audioRef.current.currentTime;
-    const seekTarget = lastRequestedSeekTimeRef.current;
-    if (isAudioLoading && Number.isFinite(newTime)) {
-      if (seekTarget != null) {
-        if (newTime >= Math.max(0, seekTarget - 0.8)) {
-          setIsAudioLoading(false);
-        }
-      } else if (newTime > 0.2) {
-        setIsAudioLoading(false);
-      }
-    }
+    const audio = audioRef.current;
+    if (!audio) return;
+    const newTime = audio.currentTime;
+    const activeTxn = seekTxnRef.current?.active ? seekTxnRef.current : null;
 
-    // Seek grace: after a user seek, avoid having timeupdate immediately snap UI back to 0
-    // if the underlying media pipeline failed to apply the seek yet. If it doesn't settle
-    // within the deadline, safeSeek will clear pending and UI will fall back to real time.
-    const pending = pendingSeekRef.current;
-    if (pending) {
-      const now = performance.now();
-      if (now <= pending.deadlineAtMs) {
-        if (Number.isFinite(newTime) && Math.abs(newTime - pending.targetTime) > 2.0) {
-          return;
+    // Seek grace: while a seek transaction is active, avoid UI snapping to stale/old times.
+    if (activeTxn) {
+      const pending = pendingSeekRef.current;
+      if (pending) {
+        const now = performance.now();
+        if (now <= pending.deadlineAtMs) {
+          if (Number.isFinite(newTime) && Math.abs(newTime - pending.targetTime) > 2.0) {
+            return;
+          }
+        } else {
+          pendingSeekRef.current = null;
         }
-      } else {
-        pendingSeekRef.current = null;
       }
-    }
 
-    if (isAudioLoading && seekTarget != null && Number.isFinite(newTime) && newTime < seekTarget - 2.0) {
-      return;
+      if (Number.isFinite(newTime) && newTime < activeTxn.targetTime - 2.0) {
+        return;
+      }
+
+      void completeSeekTxnIfReady({ requestId: activeTxn.id, forceResume: true });
+    } else if (networkLoading && Number.isFinite(newTime) && newTime > 0.2) {
+      setNetworkLoading(false);
     }
     
     // Calculate which lyric line should be active
@@ -897,21 +983,62 @@ const App: React.FC = () => {
     const audio = audioRef.current;
     if (!audio) return;
 
-    const handlePlay = () => setIsPlaying(true);
+    const handlePlay = () => {
+      setIsPlaying(true);
+      if (!seekTxnRef.current?.active) {
+        setNetworkLoading(false);
+      }
+    };
     const handlePause = () => {
       setIsPlaying(false);
-      setIsAudioLoading(false);
+      setNetworkLoading(false);
+      if (!seekTxnRef.current?.active) {
+        setSeekLoading(false);
+      }
     };
     const handleWaiting = () => {
-      if (!audio.paused) setIsAudioLoading(true);
+      if (audio.paused) return;
+      if (seekTxnRef.current?.active) {
+        setSeekLoading(true);
+      } else {
+        setNetworkLoading(true);
+      }
     };
     const handleStalled = () => {
-      if (!audio.paused) setIsAudioLoading(true);
+      if (audio.paused) return;
+      if (seekTxnRef.current?.active) {
+        setSeekLoading(true);
+      } else {
+        setNetworkLoading(true);
+      }
     };
-    const handleCanPlay = () => setIsAudioLoading(false);
-    const handlePlaying = () => setIsAudioLoading(false);
-    const handleSeeking = () => setIsAudioLoading(true);
-    const handleSeeked = () => setIsAudioLoading(false);
+    const handleCanPlay = () => {
+      const txn = seekTxnRef.current;
+      if (txn?.active) {
+        void completeSeekTxnIfReady({ requestId: txn.id, forceResume: true });
+        return;
+      }
+      setNetworkLoading(false);
+    };
+    const handlePlaying = () => {
+      const txn = seekTxnRef.current;
+      if (txn?.active) {
+        void completeSeekTxnIfReady({ requestId: txn.id, forceResume: false });
+        return;
+      }
+      setNetworkLoading(false);
+    };
+    const handleSeeking = () => {
+      if (seekTxnRef.current?.active) {
+        setSeekLoading(true);
+      }
+    };
+    const handleSeeked = () => {
+      const txn = seekTxnRef.current;
+      if (txn?.active) {
+        void completeSeekTxnIfReady({ requestId: txn.id, forceResume: true });
+      }
+    };
 
     // Initialize volume
     audio.volume = volume;
@@ -935,7 +1062,7 @@ const App: React.FC = () => {
       audio.removeEventListener('seeking', handleSeeking);
       audio.removeEventListener('seeked', handleSeeked);
     };
-  }, [currentSong, volume]);
+  }, [completeSeekTxnIfReady, currentSong, volume]);
 
   // Watchdog: detect "playing but audio.currentTime not advancing" and self-heal.
   useEffect(() => {
@@ -963,7 +1090,7 @@ const App: React.FC = () => {
       const playGrace = now - lastPlayAttemptAtMsRef.current < 1500;
       const pending = pendingSeekRef.current;
       const pendingGrace = pending ? now <= pending.deadlineAtMs : false;
-      if (seekGrace || playGrace || pendingGrace) {
+      if (seekGrace || playGrace || pendingGrace || seekTxnRef.current?.active || seekLoadingRef.current) {
         stalledMs = 0;
         lastAudioTime = Number.isFinite(audio.currentTime) ? audio.currentTime : 0;
         return;
@@ -986,16 +1113,30 @@ const App: React.FC = () => {
       stalledMs += dtWall;
       if (stalledMs >= 1500) {
         stalledMs = 0;
-        void selfHeal('watchdog');
+        const target = lastRequestedSeekTimeRef.current;
+        if (target != null && Number.isFinite(target)) {
+          void selfHeal('watchdog', { targetTime: target });
+        } else {
+          void selfHeal('watchdog');
+        }
       }
     };
 
     const id = window.setInterval(tick, 250);
 
     // If the media pipeline reports waiting/stalled/error while not paused, try healing.
-    const onWaiting = () => { if (!audio.paused) void selfHeal('watchdog'); };
-    const onStalled = () => { if (!audio.paused) void selfHeal('watchdog'); };
-    const onError = () => { if (!audio.paused) void selfHeal('watchdog'); };
+    const tryWatchdogHeal = () => {
+      if (audio.paused || seekTxnRef.current?.active || seekLoadingRef.current) return;
+      const target = lastRequestedSeekTimeRef.current;
+      if (target != null && Number.isFinite(target)) {
+        void selfHeal('watchdog', { targetTime: target });
+      } else {
+        void selfHeal('watchdog');
+      }
+    };
+    const onWaiting = () => { tryWatchdogHeal(); };
+    const onStalled = () => { tryWatchdogHeal(); };
+    const onError = () => { tryWatchdogHeal(); };
     audio.addEventListener('waiting', onWaiting);
     audio.addEventListener('stalled', onStalled);
     audio.addEventListener('error', onError);

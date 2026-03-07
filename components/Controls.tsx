@@ -55,24 +55,12 @@ const formatTime = (time: number) => {
 };
 
 const LoadingBarsIcon: React.FC<{ className?: string }> = ({ className }) => (
-  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" className={className} aria-hidden="true">
-    <rect x="18" y="22" width="14" height="76" rx="7" fill="currentColor">
-      <animate attributeName="y" values="22;40;22" dur="0.9s" repeatCount="indefinite" />
-      <animate attributeName="height" values="76;40;76" dur="0.9s" repeatCount="indefinite" />
-    </rect>
-    <rect x="40" y="22" width="14" height="76" rx="7" fill="currentColor">
-      <animate attributeName="y" values="40;22;40" dur="0.9s" begin="0.1s" repeatCount="indefinite" />
-      <animate attributeName="height" values="40;76;40" dur="0.9s" begin="0.1s" repeatCount="indefinite" />
-    </rect>
-    <rect x="62" y="22" width="14" height="76" rx="7" fill="currentColor">
-      <animate attributeName="y" values="22;48;22" dur="0.9s" begin="0.2s" repeatCount="indefinite" />
-      <animate attributeName="height" values="76;32;76" dur="0.9s" begin="0.2s" repeatCount="indefinite" />
-    </rect>
-    <rect x="84" y="22" width="14" height="76" rx="7" fill="currentColor">
-      <animate attributeName="y" values="48;22;48" dur="0.9s" begin="0.3s" repeatCount="indefinite" />
-      <animate attributeName="height" values="32;76;32" dur="0.9s" begin="0.3s" repeatCount="indefinite" />
-    </rect>
-  </svg>
+  <span className={`loading-bars ${className ?? ''}`} aria-hidden="true">
+    <span className="loading-bars__bar" />
+    <span className="loading-bars__bar" />
+    <span className="loading-bars__bar" />
+    <span className="loading-bars__bar" />
+  </span>
 );
 
 const Controls: React.FC<ControlsProps> = ({ 
