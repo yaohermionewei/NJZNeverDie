@@ -28,6 +28,7 @@ import { LyricLine, ThemeMode, VinylParams } from './types';
 //   (so we show: current + next, rather than leaving the previous line's second row lingering).
 const HIDDEN_LYRIC_LINE_HEIGHT_PX = 26;
 const HIDDEN_LYRIC_BLOCK_HEIGHT_PX = HIDDEN_LYRIC_LINE_HEIGHT_PX * 2;
+const SONG_SWITCH_GUARD_MS = 2800;
 
 function clamp01(n: number) {
   return Math.max(0, Math.min(1, n));
@@ -422,6 +423,16 @@ const App: React.FC = () => {
     const wasPlaying = audioRef.current ? !audioRef.current.paused : isPlaying;
     const shouldAutoPlay = forceAutoPlayRef.current || wasPlaying;
     forceAutoPlayRef.current = false;
+    const now = performance.now();
+    lastSongChangeAtMsRef.current = now;
+    lastHandledEndedAtMsRef.current = 0;
+    lastRequestedSeekRef.current = null;
+    pendingSeekRef.current = null;
+    lastBackgroundTimeRef.current = null;
+    recoveringRef.current = false;
+    cooldownUntilMsRef.current = 0;
+    lastUserSeekAtMsRef.current = 0;
+    lastPlayAttemptAtMsRef.current = now;
     
     // Stop current playback
     if (audioRef.current) {
@@ -481,9 +492,11 @@ const App: React.FC = () => {
   const recoveringRef = useRef<boolean>(false);
   const cooldownUntilMsRef = useRef<number>(0);
   const lastBackgroundTimeRef = useRef<number | null>(null);
-  const lastRequestedSeekTimeRef = useRef<number | null>(null);
+  const lastRequestedSeekRef = useRef<{ songId: string; time: number } | null>(null);
   const seekRequestSeqRef = useRef<number>(0);
   const seekLoadingRef = useRef<boolean>(false);
+  const lastSongChangeAtMsRef = useRef<number>(performance.now());
+  const lastHandledEndedAtMsRef = useRef<number>(0);
 
   useEffect(() => {
     seekLoadingRef.current = seekLoading;
@@ -551,12 +564,12 @@ const App: React.FC = () => {
       shouldResume: autoPlay || !audio.paused,
       prevMuted
     };
-    lastRequestedSeekTimeRef.current = targetTime;
+    lastRequestedSeekRef.current = { songId: currentSongId, time: targetTime };
     setSeekLoading(true);
     setNetworkLoading(false);
     try { audio.muted = true; } catch {}
     return requestId;
-  }, []);
+  }, [currentSongId]);
 
   const isSeekRequestStale = React.useCallback((requestId: number) => {
     const txn = seekTxnRef.current;
@@ -888,7 +901,7 @@ const App: React.FC = () => {
     const d = Number.isFinite(audio.duration) ? audio.duration : duration;
     const t = Math.max(0, Math.min(time, Number.isFinite(d) && d > 0 ? d : time));
     const now = performance.now();
-    lastRequestedSeekTimeRef.current = t;
+    lastRequestedSeekRef.current = { songId: currentSongId, time: t };
 
     // Prevent onTimeUpdate from snapping UI during live scrub
     pendingSeekRef.current = { targetTime: t, startedAtMs: now, deadlineAtMs: now + 300 };
@@ -898,7 +911,7 @@ const App: React.FC = () => {
     setNetworkLoading(false);
 
     try { audio.currentTime = t; } catch {}
-  }, [duration]);
+  }, [currentSongId, duration]);
 
   // Handle Volume
   const handleVolumeChange = (newVolume: number) => {
@@ -961,8 +974,19 @@ const App: React.FC = () => {
 
   // Loaded Meta
   const onLoadedMetadata = () => {
-    if (audioRef.current) {
-      setDuration(audioRef.current.duration);
+    const audio = audioRef.current;
+    if (!audio) return;
+    const loadedDuration = audio.duration;
+    setDuration(loadedDuration);
+    const target = lastRequestedSeekRef.current;
+    if (!target) return;
+    if (target.songId !== currentSongId) {
+      lastRequestedSeekRef.current = null;
+      return;
+    }
+    if (!Number.isFinite(loadedDuration) || loadedDuration <= 0) return;
+    if (target.time > Math.max(0, loadedDuration - 0.01)) {
+      lastRequestedSeekRef.current = null;
     }
   };
 
@@ -973,7 +997,18 @@ const App: React.FC = () => {
 
   // Handle song end - auto play next song
   const onEnded = () => {
-    // Auto skip to next song in playlist
+    const audio = audioRef.current;
+    if (!audio) return;
+    const now = performance.now();
+    if (now - lastSongChangeAtMsRef.current < SONG_SWITCH_GUARD_MS) return;
+    if (now - lastHandledEndedAtMsRef.current < 800) return;
+    const d = Number.isFinite(audio.duration) ? audio.duration : duration;
+    const t = Number.isFinite(audio.currentTime) ? audio.currentTime : currentTime;
+    if (!Number.isFinite(d) || d <= 0) return;
+    if (!Number.isFinite(t) || t < Math.max(0, d - 1.2)) return;
+    lastHandledEndedAtMsRef.current = now;
+    lastRequestedSeekRef.current = null;
+    pendingSeekRef.current = null;
     forceAutoPlayRef.current = true;
     handleSkipNext();
   };
@@ -1077,6 +1112,11 @@ const App: React.FC = () => {
       const now = performance.now();
       const dtWall = now - lastWall;
       lastWall = now;
+      const inSongSwitchGuard = now - lastSongChangeAtMsRef.current < SONG_SWITCH_GUARD_MS;
+      const requestedTarget = lastRequestedSeekRef.current;
+      const targetTime = requestedTarget && requestedTarget.songId === currentSongId && Number.isFinite(requestedTarget.time)
+        ? requestedTarget.time
+        : null;
 
       // Don't heal in background or during explicit seeking.
       if (document.hidden || audio.seeking) {
@@ -1090,7 +1130,7 @@ const App: React.FC = () => {
       const playGrace = now - lastPlayAttemptAtMsRef.current < 1500;
       const pending = pendingSeekRef.current;
       const pendingGrace = pending ? now <= pending.deadlineAtMs : false;
-      if (seekGrace || playGrace || pendingGrace || seekTxnRef.current?.active || seekLoadingRef.current) {
+      if (inSongSwitchGuard || seekGrace || playGrace || pendingGrace || seekTxnRef.current?.active || seekLoadingRef.current) {
         stalledMs = 0;
         lastAudioTime = Number.isFinite(audio.currentTime) ? audio.currentTime : 0;
         return;
@@ -1113,9 +1153,8 @@ const App: React.FC = () => {
       stalledMs += dtWall;
       if (stalledMs >= 1500) {
         stalledMs = 0;
-        const target = lastRequestedSeekTimeRef.current;
-        if (target != null && Number.isFinite(target)) {
-          void selfHeal('watchdog', { targetTime: target });
+        if (targetTime != null) {
+          void selfHeal('watchdog', { targetTime });
         } else {
           void selfHeal('watchdog');
         }
@@ -1126,10 +1165,15 @@ const App: React.FC = () => {
 
     // If the media pipeline reports waiting/stalled/error while not paused, try healing.
     const tryWatchdogHeal = () => {
+      const now = performance.now();
+      if (now - lastSongChangeAtMsRef.current < SONG_SWITCH_GUARD_MS) return;
       if (audio.paused || seekTxnRef.current?.active || seekLoadingRef.current) return;
-      const target = lastRequestedSeekTimeRef.current;
-      if (target != null && Number.isFinite(target)) {
-        void selfHeal('watchdog', { targetTime: target });
+      const requestedTarget = lastRequestedSeekRef.current;
+      const targetTime = requestedTarget && requestedTarget.songId === currentSongId && Number.isFinite(requestedTarget.time)
+        ? requestedTarget.time
+        : null;
+      if (targetTime != null) {
+        void selfHeal('watchdog', { targetTime });
       } else {
         void selfHeal('watchdog');
       }
