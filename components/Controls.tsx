@@ -55,12 +55,16 @@ const formatTime = (time: number) => {
 };
 
 const LoadingBarsIcon: React.FC<{ className?: string }> = ({ className }) => (
-  <span className={`loading-bars ${className ?? ''}`} aria-hidden="true">
-    <span className="loading-bars__bar" />
-    <span className="loading-bars__bar" />
-    <span className="loading-bars__bar" />
-    <span className="loading-bars__bar" />
-  </span>
+  <svg
+    viewBox="0 0 120 120"
+    className={`loading-bars-svg ${className ?? ''}`}
+    aria-hidden="true"
+  >
+    <rect className="loading-bars-svg__bar loading-bars-svg__bar--1" x="18" y="22" width="14" height="76" rx="7" fill="currentColor" />
+    <rect className="loading-bars-svg__bar loading-bars-svg__bar--2" x="40" y="22" width="14" height="76" rx="7" fill="currentColor" />
+    <rect className="loading-bars-svg__bar loading-bars-svg__bar--3" x="62" y="22" width="14" height="76" rx="7" fill="currentColor" />
+    <rect className="loading-bars-svg__bar loading-bars-svg__bar--4" x="84" y="22" width="14" height="76" rx="7" fill="currentColor" />
+  </svg>
 );
 
 const Controls: React.FC<ControlsProps> = ({ 

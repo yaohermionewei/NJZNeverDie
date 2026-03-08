@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Loading 动效预览</title>
+    <style>
+      :root {
+        --bg: #eef1f5;
+        --card: #ffffff;
+        --text: #1f2937;
+        --muted: #6b7280;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        padding: 24px;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+        background: radial-gradient(circle at 12% 8%, #ffffff 0%, var(--bg) 52%, #e7ebf0 100%);
+        color: var(--text);
+      }
+
+      h1 {
+        margin: 0 0 8px 0;
+        font-size: 24px;
+        line-height: 1.25;
+      }
+
+      .subtitle {
+        margin: 0 0 18px 0;
+        color: var(--muted);
+        font-size: 14px;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 16px;
+      }
+
+      .card {
+        background: var(--card);
+        border-radius: 16px;
+        padding: 16px;
+        border: 1px solid rgba(17, 24, 39, 0.08);
+        box-shadow: 0 10px 24px rgba(17, 24, 39, 0.08);
+      }
+
+      .card h2 {
+        margin: 0 0 6px 0;
+        font-size: 15px;
+      }
+
+      .card p {
+        margin: 0 0 14px 0;
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      .demo-area {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        height: 150px;
+        border-radius: 12px;
+        background: linear-gradient(180deg, rgba(17, 24, 39, 0.03) 0%, rgba(17, 24, 39, 0.06) 100%);
+      }
+
+      .demo-button {
+        width: 84px;
+        height: 84px;
+        border: 0;
+        border-radius: 999px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        color: #1f2937;
+        background: rgba(255, 255, 255, 0.9);
+        box-shadow: 0 14px 30px rgba(17, 24, 39, 0.16), inset 0 1px 0 rgba(255, 255, 255, 0.85);
+      }
+
+      .demo-area.dark {
+        background: linear-gradient(180deg, #1d2432 0%, #151b26 100%);
+      }
+
+      .demo-area.dark .demo-button {
+        color: #eef2f7;
+        background: rgba(255, 255, 255, 0.12);
+        box-shadow: 0 16px 30px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.24);
+      }
+
+      .loading-bars-svg {
+        display: block;
+        width: 34px;
+        height: 34px;
+      }
+
+      .loading-bars-svg__bar {
+        transform-box: fill-box;
+        transform-origin: 50% 50%;
+        will-change: transform, opacity;
+      }
+
+      @keyframes loading-bars-pulse-a {
+        0%, 100% {
+          transform: scaleY(1);
+          opacity: 1;
+        }
+        50% {
+          transform: scaleY(0.53);
+          opacity: 0.72;
+        }
+      }
+
+      @keyframes loading-bars-pulse-b {
+        0%, 100% {
+          transform: scaleY(0.53);
+          opacity: 0.72;
+        }
+        50% {
+          transform: scaleY(1);
+          opacity: 1;
+        }
+      }
+
+      @keyframes loading-bars-pulse-c {
+        0%, 100% {
+          transform: scaleY(1);
+          opacity: 1;
+        }
+        50% {
+          transform: scaleY(0.42);
+          opacity: 0.68;
+        }
+      }
+
+      @keyframes loading-bars-pulse-d {
+        0%, 100% {
+          transform: scaleY(0.42);
+          opacity: 0.68;
+        }
+        50% {
+          transform: scaleY(1);
+          opacity: 1;
+        }
+      }
+
+      /* 1) 恢复版（与播放器当前实现一致） */
+      .style-restore .loading-bars-svg__bar--1 { animation: loading-bars-pulse-a 0.9s ease-in-out infinite; }
+      .style-restore .loading-bars-svg__bar--2 { animation: loading-bars-pulse-b 0.9s ease-in-out infinite 0.1s; }
+      .style-restore .loading-bars-svg__bar--3 { animation: loading-bars-pulse-c 0.9s ease-in-out infinite 0.2s; }
+      .style-restore .loading-bars-svg__bar--4 { animation: loading-bars-pulse-d 0.9s ease-in-out infinite 0.3s; }
+
+      /* 2) 稳重版（更慢） */
+      .style-steady .loading-bars-svg__bar--1 { animation: loading-bars-pulse-a 1.2s ease-in-out infinite; }
+      .style-steady .loading-bars-svg__bar--2 { animation: loading-bars-pulse-b 1.2s ease-in-out infinite 0.12s; }
+      .style-steady .loading-bars-svg__bar--3 { animation: loading-bars-pulse-c 1.2s ease-in-out infinite 0.24s; }
+      .style-steady .loading-bars-svg__bar--4 { animation: loading-bars-pulse-d 1.2s ease-in-out infinite 0.36s; }
+
+      /* 3) 活泼版（更快） */
+      .style-vivid .loading-bars-svg__bar--1 { animation: loading-bars-pulse-a 0.72s ease-in-out infinite; }
+      .style-vivid .loading-bars-svg__bar--2 { animation: loading-bars-pulse-b 0.72s ease-in-out infinite 0.09s; }
+      .style-vivid .loading-bars-svg__bar--3 { animation: loading-bars-pulse-c 0.72s ease-in-out infinite 0.18s; }
+      .style-vivid .loading-bars-svg__bar--4 { animation: loading-bars-pulse-d 0.72s ease-in-out infinite 0.27s; }
+
+      @media (prefers-reduced-motion: reduce) {
+        .loading-bars-svg__bar {
+          animation-duration: 1.9s !important;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <h1>播放按钮 Loading 动效预览</h1>
+    <p class="subtitle">这是“第3个四竖条”的移动端兼容实现（SVG 形状 + CSS 动画）。打开页面即可直接观察动画，不需要真实触发 loading。</p>
+
+    <div class="grid">
+      <section class="card style-restore">
+        <h2>1) 恢复版（推荐）</h2>
+        <p>高还原你当时选中的第3个效果。</p>
+        <div class="demo-area">
+          <button class="demo-button" type="button" aria-label="loading preview">
+            <svg viewBox="0 0 120 120" class="loading-bars-svg" aria-hidden="true">
+              <rect class="loading-bars-svg__bar loading-bars-svg__bar--1" x="18" y="22" width="14" height="76" rx="7" fill="currentColor"></rect>
+              <rect class="loading-bars-svg__bar loading-bars-svg__bar--2" x="40" y="22" width="14" height="76" rx="7" fill="currentColor"></rect>
+              <rect class="loading-bars-svg__bar loading-bars-svg__bar--3" x="62" y="22" width="14" height="76" rx="7" fill="currentColor"></rect>
+              <rect class="loading-bars-svg__bar loading-bars-svg__bar--4" x="84" y="22" width="14" height="76" rx="7" fill="currentColor"></rect>
+            </svg>
+          </button>
+        </div>
+      </section>
+
+      <section class="card style-steady">
+        <h2>2) 稳重版</h2>
+        <p>节奏更慢一点，观感更平和。</p>
+        <div class="demo-area">
+          <button class="demo-button" type="button" aria-label="loading preview">
+            <svg viewBox="0 0 120 120" class="loading-bars-svg" aria-hidden="true">
+              <rect class="loading-bars-svg__bar loading-bars-svg__bar--1" x="18" y="22" width="14" height="76" rx="7" fill="currentColor"></rect>
+              <rect class="loading-bars-svg__bar loading-bars-svg__bar--2" x="40" y="22" width="14" height="76" rx="7" fill="currentColor"></rect>
+              <rect class="loading-bars-svg__bar loading-bars-svg__bar--3" x="62" y="22" width="14" height="76" rx="7" fill="currentColor"></rect>
+              <rect class="loading-bars-svg__bar loading-bars-svg__bar--4" x="84" y="22" width="14" height="76" rx="7" fill="currentColor"></rect>
+            </svg>
+          </button>
+        </div>
+      </section>
+
+      <section class="card style-vivid">
+        <h2>3) 活泼版</h2>
+        <p>节奏更快，loading 感更强。</p>
+        <div class="demo-area dark">
+          <button class="demo-button" type="button" aria-label="loading preview">
+            <svg viewBox="0 0 120 120" class="loading-bars-svg" aria-hidden="true">
+              <rect class="loading-bars-svg__bar loading-bars-svg__bar--1" x="18" y="22" width="14" height="76" rx="7" fill="currentColor"></rect>
+              <rect class="loading-bars-svg__bar loading-bars-svg__bar--2" x="40" y="22" width="14" height="76" rx="7" fill="currentColor"></rect>
+              <rect class="loading-bars-svg__bar loading-bars-svg__bar--3" x="62" y="22" width="14" height="76" rx="7" fill="currentColor"></rect>
+              <rect class="loading-bars-svg__bar loading-bars-svg__bar--4" x="84" y="22" width="14" height="76" rx="7" fill="currentColor"></rect>
+            </svg>
+          </button>
+        </div>
+      </section>
+    </div>
+  </body>
+</html>
