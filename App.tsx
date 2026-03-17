@@ -244,6 +244,9 @@ const App: React.FC = () => {
   const lastLyricIndexRef = useRef<number>(-1);
   // Mobile layout: measure bottom controls height to avoid visualizer overlap
   const [controlsHeightPx, setControlsHeightPx] = useState<number>(0);
+  const [isMobileViewport, setIsMobileViewport] = useState<boolean>(() => (
+    typeof window !== 'undefined' ? window.innerWidth < 768 : false
+  ));
   const [smallLyricTop, setSmallLyricTop] = useState<number | null>(null);
   const [smallLyricMaxHeight, setSmallLyricMaxHeight] = useState<number | null>(null);
   
@@ -263,6 +266,22 @@ const App: React.FC = () => {
       window.removeEventListener('resize', syncViewport);
       vv?.removeEventListener('resize', syncViewport);
       vv?.removeEventListener('scroll', syncViewport);
+    };
+  }, []);
+
+  useEffect(() => {
+    const vv = window.visualViewport;
+    const syncViewportWidth = () => {
+      setIsMobileViewport(window.innerWidth < 768);
+    };
+
+    syncViewportWidth();
+    window.addEventListener('resize', syncViewportWidth);
+    vv?.addEventListener('resize', syncViewportWidth);
+
+    return () => {
+      window.removeEventListener('resize', syncViewportWidth);
+      vv?.removeEventListener('resize', syncViewportWidth);
     };
   }, []);
 
@@ -297,6 +316,7 @@ const App: React.FC = () => {
   
   // Get current song info from registry
   const currentSong = useMemo(() => getSongById(currentSongId) || getDefaultSong(), [currentSongId]);
+  const cubesBottomInsetPx = Math.max(0, controlsHeightPx) + 12 + (isMobileViewport ? 32 : 0);
 
   // Helper to format song title with Remix info
   const formattedSongInfo = useMemo(() => {
@@ -1366,12 +1386,13 @@ const App: React.FC = () => {
         <div className="absolute inset-0 z-10 overflow-hidden">
            <CubesVisualizer 
              analyser={analyser} 
-             isPlaying={isPlaying}
+           isPlaying={isPlaying}
              params={cubesParams}
              colorTheme={currentSong.cubesTheme}
              // Keep background full-screen; only shift the "objects" framing up to avoid overlapping the controls.
              // Keep the scene stable when UI auto-hides: always reserve the same bottom inset.
-             uiBottomInsetPx={Math.max(0, controlsHeightPx) + 12}
+             // Add a little extra lift on phones so the cube base clears the bottom player controls.
+             uiBottomInsetPx={cubesBottomInsetPx}
            />
            <CubesControls 
              params={cubesParams}
