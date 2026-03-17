@@ -29,6 +29,7 @@ import { LyricLine, ThemeMode, VinylParams } from './types';
 const HIDDEN_LYRIC_LINE_HEIGHT_PX = 26;
 const HIDDEN_LYRIC_BLOCK_HEIGHT_PX = HIDDEN_LYRIC_LINE_HEIGHT_PX * 2;
 const SONG_SWITCH_GUARD_MS = 2800;
+const SMALL_SCREEN_CUBES_EXTRA_INSET_PX = 48;
 
 function clamp01(n: number) {
   return Math.max(0, Math.min(1, n));
@@ -316,7 +317,7 @@ const App: React.FC = () => {
   
   // Get current song info from registry
   const currentSong = useMemo(() => getSongById(currentSongId) || getDefaultSong(), [currentSongId]);
-  const cubesBottomInsetPx = Math.max(0, controlsHeightPx) + 12 + (isMobileViewport ? 32 : 0);
+  const cubesBottomInsetPx = Math.max(0, controlsHeightPx) + 12 + (isMobileViewport ? SMALL_SCREEN_CUBES_EXTRA_INSET_PX : 0);
 
   // Helper to format song title with Remix info
   const formattedSongInfo = useMemo(() => {
